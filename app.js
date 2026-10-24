@@ -30,6 +30,10 @@ const DEFAULTS = {
   interest: "4",
   debt: "",
   ltv: "75",
+  bankerShow: "",
+  bankerPledge: "",
+  disbursementDate: "",
+  fundChoice: "pledge",
 };
 
 const form = document.querySelector("#planner");
@@ -38,9 +42,13 @@ const timeline = document.querySelector("#timeline");
 const detail = document.querySelector("#detail");
 const live = document.querySelector("#live");
 const status = document.querySelector("#status");
+const tenureOut = document.querySelector("#tenure-out");
 
-/** Stays open across live updates, which replace the timeline markup. */
-let stageTableOpen = false;
+/** Which disclosures stay open when the figures are redrawn. */
+const openSections = new Set();
+
+/** Keeps the fund card open after "Add banker's figure anyway", until reload. */
+let fundsForcedOpen = false;
 
 const PHASES = {
   "within-8-weeks": {
@@ -63,7 +71,7 @@ const PHASES = {
 
 const NEW_LAUNCH_STEPS = {
   option: {
-    title: "Pay 5% › receive OTP",
+    title: "Pay 5%",
     payWith: "Cheque / cashier's order",
     todo: "Confirm law firm details and forward the OTP copy to the banker and the law firm.",
     timing: "Booking date",
@@ -81,7 +89,7 @@ const NEW_LAUNCH_STEPS = {
     timing: "21 days from receiving the S&P",
   },
   "stamp-duty": {
-    title: "Pay stamp duty",
+    title: "Stamp duty",
     payWith: "Cheque / cashier's order / CPF",
     todo: "Pay the balance of the down payment and the progressive payments.",
     timing: "14 days from exercise",
@@ -96,25 +104,25 @@ const NEW_LAUNCH_STEPS = {
 
 const RESALE_STEPS = {
   option: {
-    title: "Pay 1% option",
+    title: "Pay 1%",
     payWith: "Cheque / cashier's order",
     todo: "This takes the option. If you do not exercise, this 1% is normally forfeited.",
     timing: "OTP date",
   },
   exercise: {
-    title: "Exercise and pay 4%",
+    title: "Exercise + 4%",
     payWith: "Cheque / cashier's order",
     todo: "With the option fee, the deposit is 5%.",
     timing: "14 days from the OTP",
   },
   "stamp-duty": {
-    title: "Pay stamp duty",
+    title: "Stamp duty",
     payWith: "Cheque / cashier's order / CPF",
     todo: "Buyer's stamp duty plus any ABSD.",
     timing: "14 days from exercise",
   },
   completion: {
-    title: "Completion, with the loan",
+    title: "Completion",
     payWith: "Cash / CPF, and the bank loan",
     todo: "Pay the rest of the down payment. The bank releases the whole loan and the monthly repayment starts.",
     timing: "10 weeks after exercise",
@@ -136,10 +144,17 @@ function init() {
   form.addEventListener("submit", (event) => event.preventDefault());
   document.querySelector("#restore").addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);
+    fundsForcedOpen = false;
     applyState(DEFAULTS);
     draw();
   });
-  for (const id of ["price", "debt", "salary-1", "salary-2", "salary-3", "salary-4"]) {
+  document.querySelector("#funds-open").addEventListener("click", () => {
+    fundsForcedOpen = true;
+    draw();
+    const choice = form.elements["fund-choice"].value === "show" ? "banker-show" : "banker-pledge";
+    document.getElementById(choice).focus();
+  });
+  for (const id of ["price", "debt", "salary-1", "salary-2", "salary-3", "salary-4", "banker-show", "banker-pledge"]) {
     document.getElementById(id).addEventListener("blur", () => {
       const input = document.getElementById(id);
       const value = parseMoney(input.value);
@@ -181,6 +196,10 @@ function applyState(state) {
   form.elements.interest.value = state.interest;
   form.elements.debt.value = state.debt;
   form.elements.ltv.value = state.ltv;
+  form.elements["banker-show"].value = state.bankerShow ?? "";
+  form.elements["banker-pledge"].value = state.bankerPledge ?? "";
+  form.elements["disbursement-date"].value = state.disbursementDate ?? "";
+  form.elements["fund-choice"].value = state.fundChoice === "show" ? "show" : "pledge";
   state.ages.forEach((age, index) => {
     form.elements[`age-${index + 1}`].value = age ?? "";
   });
@@ -204,6 +223,10 @@ function collectState() {
     interest: form.elements.interest.value,
     debt: form.elements.debt.value,
     ltv: form.elements.ltv.value,
+    bankerShow: form.elements["banker-show"].value,
+    bankerPledge: form.elements["banker-pledge"].value,
+    disbursementDate: form.elements["disbursement-date"].value,
+    fundChoice: form.elements["fund-choice"].value === "show" ? "show" : "pledge",
   };
 }
 
@@ -234,6 +257,10 @@ function normalizeState(state) {
     interest: state.interest.trim(),
     debt: state.debt.trim(),
     ltv: state.ltv.trim(),
+    bankerShow: state.bankerShow.trim(),
+    bankerPledge: state.bankerPledge.trim(),
+    disbursementDate: state.disbursementDate,
+    fundChoice: state.fundChoice === "show" ? "show" : "pledge",
   };
 }
 
@@ -241,8 +268,8 @@ function draw() {
   const state = collectState();
   syncVisibility(state);
   status.textContent = sameAsExample(state)
-    ? "These boxes match the spreadsheet's example. Change anything — the figures update as you type, and stay on this device."
-    : "Figures update as you type and stay in this browser. They are not sent anywhere.";
+    ? "Spreadsheet example. Figures update as you type."
+    : "Figures update as you type and stay in this browser.";
 
   const { input, problems } = interpret(state);
   showFieldErrors(problems);
@@ -257,12 +284,16 @@ function draw() {
     renderProblems(result.errors);
     return;
   }
+  showTenure(result.maxTenureYears);
   summary.innerHTML = renderSummary(result);
+  renderFunds(result);
   timeline.innerHTML = renderPaymentTimeline(result);
-  bindStageTable();
   detail.innerHTML = renderDetail(result);
+  mountDisclosures(summary);
+  mountDisclosures(timeline);
+  mountDisclosures(detail);
   live.textContent = [
-    `Upfront cash and CPF ${money(result.totalCashCpf)}.`,
+    `Total cash and CPF ${money(result.totalCashCpf)}.`,
     `Monthly repayment ${result.monthlyRepayment == null ? "not available" : money(result.monthlyRepayment)}.`,
     `Minimum salary ${result.minSalaryTdsr == null ? "not available" : money(result.minSalaryTdsr)}.`,
   ].join(" ");
@@ -279,6 +310,8 @@ function interpret(state) {
   const price = requiredMoney(state.price, "price", "Enter the price and the figures will appear here.", problems);
   const interest = requiredPercent(state.interest, "interest", "Enter an interest rate. 4% is the usual starting point.", problems);
   const ltv = requiredPercent(state.ltv, "ltv", "Enter a loan-to-value. 75% is the usual starting point.", problems);
+  const bankerShow = optionalMoney(state.bankerShow, "banker-show", "The banker's show-funds figure needs to be a number, or blank.", problems);
+  const bankerPledge = optionalMoney(state.bankerPledge, "banker-pledge", "The banker's pledged-funds figure needs to be a number, or blank.", problems);
   const debt = state.debt.trim() === "" ? 0 : parseMoney(state.debt);
   if (state.debt.trim() !== "" && (debt == null || Number.isNaN(debt))) {
     problems.push({ field: "debt", message: "Other monthly debt needs to be a number, or blank." });
@@ -327,8 +360,22 @@ function interpret(state) {
       annualInterestRate: interest,
       otherMonthlyDebt: debt,
       ltv,
+      bankerShowFunds: bankerShow,
+      bankerPledgedFunds: bankerPledge,
+      disbursementDate: state.disbursementDate || null,
+      fundChoice: state.fundChoice,
     },
   };
+}
+
+function optionalMoney(raw, field, message, problems) {
+  if (raw.trim() === "") return null;
+  const value = parseMoney(raw);
+  if (value == null || Number.isNaN(value) || value < 0) {
+    problems.push({ field, message });
+    return null;
+  }
+  return value;
 }
 
 function requiredMoney(raw, field, emptyMessage, problems) {
@@ -393,12 +440,29 @@ function showFieldErrors(problems) {
   }
 }
 
+function showTenure(years) {
+  if (!(years > 0)) {
+    tenureOut.textContent = "—";
+    return;
+  }
+  const rounded = Math.round(years * 10) / 10;
+  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  tenureOut.textContent = `${text} yrs`;
+}
+
+function formatRate(rate) {
+  if (!Number.isFinite(rate)) return "—";
+  return `${(Math.round(rate * 10000) / 100).toFixed(2)}%`;
+}
+
 function renderProblems(problems) {
   const calm = problems.every((problem) => problem.calm);
   const items = problems.map((problem) => `<p>${esc(problem.message)}</p>`).join("");
+  showTenure(null);
   summary.innerHTML = calm
-    ? `<section class="hero"><p class="hero-kicker">Waiting for a price</p><p class="figure-note">${esc(problems[0].message)}</p></section>`
+    ? `<section class="results"><p class="result-line">${esc(problems[0].message)}</p></section>`
     : `<div class="note">${items}</div>`;
+  document.getElementById("funds").hidden = true;
   timeline.innerHTML = "";
   detail.innerHTML = "";
   live.textContent = problems[0].message;
@@ -407,66 +471,102 @@ function renderProblems(problems) {
 function renderSummary(result) {
   const monthly = result.monthlyRepayment == null ? "—" : money(result.monthlyRepayment);
   const salary = result.minSalaryTdsr == null ? "—" : money(result.minSalaryTdsr);
-  const modeLabel = result.mode === "new_launch" ? "New launch" : "Resale / completed";
-  const tenureBit = result.maxTenureYears > 0 ? formatTenure(result.maxTenureYears) : "no usable tenure";
+  const tenureNote = result.maxTenureYears > 0
+    ? `${tenureOut.textContent} at ${formatRate(result.annualInterestRate)}`
+    : "No usable tenure";
 
   return `
-    <section class="hero">
-      <p class="hero-kicker">${esc(modeLabel)} · ${esc(money(result.price))} · ${esc(formatPercent(result.enteredLtv))} LTV · ${esc(formatPercent(result.annualInterestRate))} interest · ${esc(tenureBit)}</p>
+    <section class="results" aria-label="Main figures">
       <div class="figures">
-        <article>
-          <h2>Upfront cash and CPF</h2>
+        <article class="figure-total">
+          <h2>Total cash / CPF</h2>
           <p class="figure">${esc(money(result.totalCashCpf))}</p>
-          <p class="figure-note">Option fee, stamp duty and your cash share of the price, as one total.</p>
+          <p class="figure-note">Not all of this is due at booking.</p>
         </article>
-        <article>
+        ${whenNeeded(result)}
+        <article class="figure-monthly">
           <h2>Monthly repayment</h2>
           <p class="figure">${esc(monthly)}</p>
-          <p class="figure-note">${esc(monthlyNote(result))}</p>
+          <p class="figure-note">${esc(tenureNote)}</p>
         </article>
-        <article>
-          <h2>Minimum salary, 55% TDSR</h2>
+        <article class="figure-salary">
+          <h2>Minimum salary (55% TDSR)</h2>
           <p class="figure">${esc(salary)}</p>
-          <p class="figure-note">${esc(salaryNote(result))}</p>
+          <p class="figure-note">Combined gross monthly</p>
         </article>
       </div>
-    </section>
-    <section class="facts" aria-label="More of the main figures">
-      ${fact("Loan used for the repayment", result.estimatedLoan == null ? "—" : money(result.estimatedLoan))}
-      ${fact("Minimum salary, 30% MSR", result.minSalaryMsr == null ? "—" : money(result.minSalaryMsr))}
-      ${fact("Show funds, unpledged", result.showFundsUnpledged == null ? "—" : money(result.showFundsUnpledged))}
-      ${fact("Show funds, pledged 48 months", result.showFundsPledged == null ? "—" : money(result.showFundsPledged))}
+      <div class="facts" aria-label="More of the main figures">
+        ${fact("Loan", result.estimatedLoan == null ? "—" : money(result.estimatedLoan))}
+        ${fact("Stamp duty", money(result.totalStampDuty))}
+      </div>
     </section>
     ${summaryNotes(result)}
   `;
 }
 
-function monthlyNote(result) {
-  if (!(result.maxTenureYears > 0)) {
-    return "The weighted age leaves no positive loan tenure in the spreadsheet, so there is no repayment to show.";
-  }
-  const exact = formatSgd(result.monthlyRepayment, { digits: 2 });
-  return `Rounded to the nearest dollar. The exact estimate is ${exact}, on the loan over ${formatTenure(result.maxTenureYears)} at ${formatPercent(result.annualInterestRate)}.`;
-}
+function whenNeeded(result) {
+  const needed = result.cashNeeded;
+  if (!needed || needed.items.length === 0) return "";
+  const total = needed.total || result.totalCashCpf;
+  const bar = needed.items.map((item) => {
+    const share = total > 0 ? (item.amount / total) * 100 : 0;
+    return `<span style="width:${share}%"></span>`;
+  }).join("");
+  const rows = needed.items.map((item) => {
+    if (item.kind === "group") {
+      const parts = (item.parts || []).map((part) => `
+        <li>
+          <span>${esc(part.date ? formatDate(part.date) : "Add the date")}</span>
+          <span>${esc(part.label)}</span>
+          <span>${esc(money(part.amount))}</span>
+        </li>
+      `).join("");
+      return `
+        <li>
+          <details class="when-group" data-keep="when-${esc(item.id)}">
+            <summary>
+              <span class="when-when">${esc(item.date ? `By ${formatDate(item.date)}` : "Add the date")}</span>
+              <span class="when-label">${esc(item.label)}</span>
+              <span class="when-amt">${esc(money(item.amount))}</span>
+            </summary>
+            <ul>${parts}</ul>
+          </details>
+        </li>
+      `;
+    }
+    const when = item.date
+      ? (result.mode === "new_launch" ? formatMonthYear(item.date) : formatDate(item.date))
+      : "Add the date";
+    return `
+      <li class="when-row">
+        <span class="when-when">${esc(when)}</span>
+        <span class="when-label">${esc(item.label)}</span>
+        <span class="when-amt">${esc(money(item.amount))}</span>
+      </li>
+    `;
+  }).join("");
+  const start = needed.repaymentsStart;
+  const startLine = start
+    ? `<p class="when-loan">${esc(start.date ? `Loan repayments start around ${formatMonthYear(start.date)}.` : "Loan repayments start when the bank first pays out.")}</p>`
+    : "";
 
-function salaryNote(result) {
-  if (result.minSalaryTdsr == null) return "Salary tests need a repayment first.";
-  if (result.otherMonthlyDebt > 0) {
-    return `Gross monthly income so this repayment plus ${money(result.otherMonthlyDebt)} of other debt stays within 55%.`;
-  }
-  return "Gross monthly income so this repayment stays within 55%. No other monthly debt is entered.";
+  return `
+    <div class="when">
+      <h3>When you'll need it</h3>
+      <div class="when-bar" aria-hidden="true">${bar}</div>
+      <ol>${rows}</ol>
+      ${startLine}
+    </div>
+  `;
 }
 
 function summaryNotes(result) {
   const blocks = [];
-  if (!result.salaryEntered && result.showFundsUnpledged > 0) {
-    blocks.push(`<p>No monthly salary has been entered, so the whole minimum salary is treated as a gap. These show-funds amounts are what that gap implies. Add each buyer's salary and they shrink or drop to zero.</p>`);
-  }
   if (result.warnings.some((warning) => warning.code === "iwaa-shortfall")) {
-    blocks.push(`<p>The age rule cuts the loan to ${esc(formatPercent(result.iwaaLtv))} of the price, ${esc(money(result.ltvShortfall))} less than the LTV you typed. The upfront total follows the LTV you typed, same as the spreadsheet. If the bank uses the lower limit, that shortfall is extra cash or CPF.</p>`);
+    blocks.push(`<p>The age rule cuts the loan to ${esc(formatPercent(result.iwaaLtv))} of the price, ${esc(money(result.ltvShortfall))} less than the LTV you typed. The total cash / CPF follows the LTV you typed, same as the spreadsheet. If the bank uses the lower limit, that shortfall is extra cash or CPF.</p>`);
   }
   if (result.warnings.some((warning) => warning.code === "ltv-above-75")) {
-    blocks.push(`<p>The LTV you typed is above 75%. The spreadsheet still adds a 5% foundation top-up, so the upfront total does not fall any further. The stage table follows the LTV you typed, and above 75% those two can disagree. Most bank loans for a private home stop at 75%, or 55% when the loan would run past age 65.</p>`);
+    blocks.push(`<p>The LTV you typed is above 75%. The spreadsheet still adds a 5% foundation top-up, so the total cash / CPF does not fall any further. The stage table follows the LTV you typed, and above 75% those two can disagree. Most bank loans for a private home stop at 75%, or 55% when the loan would run past age 65.</p>`);
   }
   if (result.warnings.some((warning) => warning.code === "absd-nonstandard")) {
     blocks.push(`<p>${esc(formatPercent(result.absdRate))} is not on the spreadsheet's ABSD list (0%, 5%, 20%, 30%, 60%, 65%). Kept anyway. 35% is a real rate for some buyers, such as a permanent resident buying a third home — confirm it applies to you.</p>`);
@@ -483,10 +583,14 @@ function summaryNotes(result) {
 
 function renderDetail(result) {
   return [
-    cashSection(result),
-    loanSection(result),
-    incomeSection(result),
+    fold("cash", "How the total cash / CPF is built", cashSection(result)),
+    fold("loan", "The loan, age and LTV", loanSection(result)),
+    fold("income", "Salary and show funds", incomeSection(result)),
   ].join("");
+}
+
+function fold(key, title, body) {
+  return `<details class="fold" data-keep="${esc(key)}"><summary>${esc(title)}</summary><div class="fold-body">${body}</div></details>`;
 }
 
 function cashSection(result) {
@@ -497,7 +601,6 @@ function cashSection(result) {
       : "Above a 75% LTV the spreadsheet still adds the 5% foundation top-up, while the stage table follows the LTV you typed. Do not add the two totals together.";
     return `
       <section>
-        <h2>How the upfront total is built</h2>
         <p class="section-lead">${esc(match)}</p>
         ${line("Option fee, 5%", launch.optionFee, "Paid on the booking date to receive the option.")}
         ${line("Of which 1.25% is forfeitable", launch.forfeitable, "Kept by the developer if you do not exercise.", "sub")}
@@ -507,7 +610,7 @@ function cashSection(result) {
         ${line(`Additional buyer's stamp duty (ABSD) at ${formatPercent(result.absdRate)}`, result.absd, "Price multiplied by the ABSD rate you chose.")}
         ${line("Foundation top-up", launch.foundationTopUp, "The spreadsheet always includes this 5%. It is the cash piece inside a 75% loan.")}
         ${line("Additional top-up, LTV under 75%", launch.additionalTopUp, "MAX(0, 75% minus your LTV) times the price. Zero when your LTV is 75% or more.")}
-        ${line("Total cash and CPF", result.totalCashCpf, "The sum of the lines above.", "total")}
+        ${line("Total cash / CPF", result.totalCashCpf, "The sum of the lines above. Below 75% LTV, some of it is paid as the building goes up.", "total")}
       </section>
     `;
   }
@@ -515,14 +618,13 @@ function cashSection(result) {
   const resale = result.resale;
   return `
     <section>
-      <h2>How the upfront total is built</h2>
       <p class="section-lead">Resale cash is the 5% deposit, stamp duty, and whatever down payment is still left at completion. Cash and CPF stay together.</p>
       ${line("Option fee, 1%", resale.optionFee, "Paid on the OTP date. Normally forfeited if you do not exercise.")}
       ${line("Exercise payment, 4%", resale.exercisePayment, "14 days later. Brings the deposit to 5%.")}
       ${line("Buyer's stamp duty (BSD)", result.bsd, "Same residential steps as a new launch.")}
       ${line(`Additional buyer's stamp duty (ABSD) at ${formatPercent(result.absdRate)}`, result.absd, "Price multiplied by the ABSD rate you chose.")}
       ${line("Rest of the down payment", resale.remainingDownPayment, "Due at completion. This is your LTV's down payment, minus the 5% deposit.")}
-      ${line("Total cash and CPF", result.totalCashCpf, "Deposit, stamp duty and the completion balance.", "total")}
+      ${line("Total cash / CPF", result.totalCashCpf, "Deposit, stamp duty and the completion balance.", "total")}
     </section>
   `;
 }
@@ -536,8 +638,7 @@ function loanSection(result) {
     : "No salary entered";
   return `
     <section>
-      <h2>The loan</h2>
-      <p class="section-lead">The repayment uses the lower of the loan you asked for and the age-based limit. That is the spreadsheet's "estimated loan".</p>
+      <p class="section-lead">The repayment uses the lower of the loan you asked for and the age-based limit. That is the spreadsheet's estimated loan.</p>
       ${line("LTV you typed", null, `${formatPercent(result.enteredLtv)} of the price.`, "", formatPercent(result.enteredLtv))}
       ${line("Loan at that LTV", result.loanAtEnteredLtv)}
       ${line("Income-weighted average age", null, "Each buyer's age, weighted by monthly salary. Blank rows are ignored.", "", iwaaText)}
@@ -547,7 +648,7 @@ function loanSection(result) {
       ${line("Estimated loan", result.estimatedLoan, "The lower of the two loans. The monthly repayment is based on this.")}
       ${line("LTV shortfall", result.ltvShortfall, "How much less the age rule lends, compared with the LTV you typed.")}
       ${line("Highest price this loan supports", null, "Estimated loan divided by the LTV you typed. It drops below your price when the age rule cuts the loan.", "", priceLine)}
-      ${line("Exact monthly repayment", null, "Salary figures are rounded from this exact amount, not from the already-rounded figure in the green panel.", "", result.monthlyRepayment == null ? "—" : formatSgd(result.monthlyRepayment, { digits: 2 }))}
+      ${line("Exact monthly repayment", null, "Salary figures are rounded from this exact amount, not from the already-rounded figure at the top.", "", result.monthlyRepayment == null ? "—" : formatSgd(result.monthlyRepayment, { digits: 2 }))}
     </section>
   `;
 }
@@ -555,33 +656,29 @@ function loanSection(result) {
 function incomeSection(result) {
   return `
     <section>
-      <h2>Salary and show funds</h2>
-      <p class="section-lead">TDSR is the test banks apply to private homes. MSR is shown beside it because HDB and executive condos use 30%.</p>
+      <p class="section-lead">${esc(incomeLead(result))}</p>
       ${line("Monthly repayment", result.monthlyRepayment, "Rounded to the nearest dollar here. The exact amount is in the loan section.", "", result.monthlyRepayment == null ? "—" : money(result.monthlyRepayment))}
       ${line("Other monthly debt", result.otherMonthlyDebt)}
       ${line("Minimum salary at 55% TDSR", result.minSalaryTdsr, "Repayment plus other debt, divided by 0.55. Rounded to the nearest dollar.")}
       ${line("Minimum salary at 30% MSR", result.minSalaryMsr, "Repayment divided by 0.3. Other debt is not included. For comparison.")}
       ${line("Salary entered", result.totalMonthlySalary, "The monthly salaries you typed, added up.")}
       ${line("Income shortfall", result.incomeShortfall, "How far the entered salary is below the TDSR minimum. Zero if income is already enough.")}
-      ${line("Show funds, unpledged", result.showFundsUnpledged, "Shortfall × 48 months ÷ 0.3, rounded up to the next S$1,000. Unpledged savings are only counted at 30%.")}
-      ${line("Show funds, pledged", result.showFundsPledged, "Shortfall × 48 months, rounded up to the next S$1,000. This money would be locked for 48 months.")}
+      ${line("Show funds, unpledged", result.fundPlan.show.amount, fundWhy(result.fundPlan.show, "Shortfall × 48 months ÷ 0.3, rounded up to the next S$1,000. Unpledged savings are only counted at 30%. Not part of the total cash / CPF."))}
+      ${line("Show funds, pledged", result.fundPlan.pledge.amount, fundWhy(result.fundPlan.pledge, "Shortfall × 48 months, rounded up to the next S$1,000. Locked for 48 months. Not part of the total cash / CPF."))}
     </section>
   `;
 }
 
 function renderPaymentTimeline(result) {
-  const groups = groupPhases(result.paymentTimeline);
+  const groups = groupPhases(withFundMarkers(result));
   const phases = groups.map((group) => phaseBlock(result, group)).join("");
-  const lead = result.mode === "new_launch"
-    ? "Same order as the spreadsheet. Pay 5% and receive the OTP, then the S&P, exercise, stamp duty and the 15%, all inside eight weeks. The foundation call is 180 days after launch, and the later stages follow as the building goes up. Cash and CPF so far counts your money only. The bank’s share is shown beside it."
-    : "Same kind of timeline, with the shorter resale steps. These dates are not in the spreadsheet. This page uses a common private-resale practice: 1% on the OTP date, 14 days to exercise and pay 4%, stamp duty 14 days after that, and completion 10 weeks after exercise. Completion is often somewhere from 8 to 12 weeks. The whole loan is released at completion.";
   const table = result.mode === "new_launch" ? stageTable(result) : "";
 
   return `
     <section class="pay-timeline" aria-labelledby="timeline-heading">
       <h2 id="timeline-heading">Payment timeline</h2>
-      <p class="section-lead">${esc(lead)}</p>
       ${phases}
+      ${stepNotes(result)}
       ${table}
     </section>
   `;
@@ -600,16 +697,9 @@ function groupPhases(steps) {
 function phaseBlock(result, group) {
   const phase = PHASES[group.id];
   const items = group.steps.map((step) => stepCard(result, step)).join("");
-  const hint = group.id === "foundation-call"
-    ? `<p class="scroll-hint">On a wide screen, scroll sideways for the later stages.</p>`
-    : "";
   return `
     <section class="phase phase-${esc(group.id)}">
-      <div class="phase-band">
-        <h3>${esc(phase.title)}</h3>
-        <p>${esc(phase.lead)}</p>
-      </div>
-      ${hint}
+      <h3 class="phase-label">${esc(phase.title)}</h3>
       <div class="rail-scroll" tabindex="0" aria-label="${esc(phase.title)}">
         <ol class="rail">${items}</ol>
       </div>
@@ -617,29 +707,102 @@ function phaseBlock(result, group) {
   `;
 }
 
+function withFundMarkers(result) {
+  const steps = result.paymentTimeline.map((step) => ({ ...step }));
+  const markers = result.fundPlan?.markers || [];
+  if (markers.length === 0) return steps;
+
+  const inserts = [];
+  const byId = {
+    "fund-application": steps.findIndex((step) => step.id === "exercise"),
+    "fund-before-payout": steps.findIndex((step) => step.id === result.fundPlan.estimatedDisbursementId),
+  };
+  for (const marker of markers) {
+    const index = byId[marker.id];
+    if (index == null || index < 0) continue;
+    inserts.push({
+      index,
+      marker: { ...marker, kind: "marker", phase: steps[index].phase },
+    });
+  }
+  inserts.sort((a, b) => b.index - a.index);
+  for (const item of inserts) steps.splice(item.index, 0, item.marker);
+  return steps;
+}
+
 function stepCard(result, step) {
+  if (step.kind === "marker") return markerCard(result, step);
   const copy = stepCopy(result, step);
   const when = !step.date
     ? "Add the date"
     : step.kind === "stage"
       ? formatMonthYear(step.date)
       : formatDate(step.date);
-  const window = step.windowLabel ? `<p class="window">${esc(step.windowLabel)}</p>` : "";
-  const timing = copy.timing ? `<p class="timing">${esc(copy.timing)}</p>` : "";
-  const todo = copy.todo ? `<p class="todo"><span>To do</span> ${esc(copy.todo)}</p>` : "";
-
   return `
     <li class="step">
-      ${window}
       <p class="step-date">${esc(when)}</p>
       <h4>${esc(copy.title)}</h4>
-      ${timing}
-      ${step.kind === "stage" ? stageMoney(step) : milestoneMoney(step)}
-      <p class="pay-with">${esc(copy.payWith)}</p>
-      ${todo}
-      <p class="running">Cash / CPF so far <strong>${esc(money(step.runningCash))}</strong></p>
+      <p class="step-amount">${esc(stepAmount(step))}</p>
+      ${stepMeta(step) ? `<p class="meta">${esc(stepMeta(step))}</p>` : ""}
     </li>
   `;
+}
+
+function markerCard(result, step) {
+  const plan = result.fundPlan;
+  const when = step.date ? `${step.whenPrefix || "By"} ${formatDate(step.date)}` : "Add the date";
+  const bits = ["Not a payment"];
+  if (plan.active.amount > 0) {
+    const label = plan.choice === "show" ? "Show" : "Pledge";
+    bits.unshift(`${label} ${money(plan.active.amount)}`);
+  }
+  if (step.id === "fund-application") bits.push("The letter of offer is signed before you exercise.");
+  return `
+    <li class="step step-marker">
+      <p class="step-date">${esc(when)}</p>
+      <h4>${esc(step.title)}</h4>
+      <p class="step-amount"></p>
+      <p class="meta">${esc(bits.join(" · "))}</p>
+    </li>
+  `;
+}
+
+function stepAmount(step) {
+  if (step.kind === "stage") {
+    if (step.cashAmount > 0) return money(step.cashAmount);
+    return step.monthlyRepayment == null ? "" : `${money(step.monthlyRepayment)}/mo`;
+  }
+  if (!(step.amount > 0)) return "";
+  return money(step.amount);
+}
+
+function stepMeta(step) {
+  const soFar = `Total cash / CPF so far ${money(step.runningCash)}`;
+  if (step.kind === "stage") {
+    const bits = [formatPercent(step.percent)];
+    if (step.cashAmount > 0 && step.bankAmount > 0) bits.push("cash + bank");
+    else if (step.bankAmount > 0) bits.push("bank");
+    if (step.cashAmount > 0 && step.monthlyRepayment != null) bits.push(`${money(step.monthlyRepayment)}/mo`);
+    bits.push(soFar);
+    return bits.join(" · ");
+  }
+  if (!(step.amount > 0) && step.loanDisbursed == null) return "";
+  const bits = [];
+  if (step.loanDisbursed != null) bits.push(`loan ${money(step.loanDisbursed)}`);
+  if (step.monthlyRepayment != null) bits.push(`${money(step.monthlyRepayment)}/mo`);
+  bits.push(soFar);
+  return bits.join(" · ");
+}
+
+function stepNotes(result) {
+  const items = result.paymentTimeline.map((step) => {
+    const copy = stepCopy(result, step);
+    const note = [copy.timing, copy.todo].filter(Boolean).join(" ");
+    if (!note) return "";
+    return `<li><strong>${esc(copy.title)}</strong> ${esc(note)}</li>`;
+  }).join("");
+  if (!items) return "";
+  return `<details class="fold" data-keep="step-notes"><summary>What to do at each step</summary><ul class="notes">${items}</ul></details>`;
 }
 
 function stepCopy(result, step) {
@@ -660,42 +823,15 @@ function stepCopy(result, step) {
   return book[step.id];
 }
 
-function milestoneMoney(step) {
-  const due = step.amount == null ? "No payment" : money(step.amount);
-  const loan = step.loanDisbursed == null
-    ? ""
-    : `<p class="loan-line">Loan released <strong>${esc(money(step.loanDisbursed))}</strong></p>`;
-  const repay = step.monthlyRepayment == null
-    ? ""
-    : `<p class="repay">Monthly repayment starts at <strong>${esc(money(step.monthlyRepayment))}</strong></p>`;
-  return `
-    <p class="kicker">Due</p>
-    <p class="step-amount">${esc(due)}</p>
-    ${loan}
-    ${repay}
-  `;
-}
-
-function stageMoney(step) {
-  const repay = step.monthlyRepayment == null ? "—" : money(step.monthlyRepayment);
-  return `
-    <p class="kicker">Est. monthly repayment</p>
-    <p class="step-amount">${esc(repay)}</p>
-    <dl class="split">
-      <div><dt>Stage</dt><dd>${esc(formatPercent(step.percent))}</dd></div>
-      <div><dt>Cash / CPF</dt><dd>${esc(money(step.cashAmount))}</dd></div>
-      <div><dt>Bank</dt><dd>${esc(money(step.bankAmount))}</dd></div>
-    </dl>
-  `;
-}
-
-function bindStageTable() {
-  const details = timeline.querySelector(".stage-table");
-  if (!details) return;
-  details.open = stageTableOpen;
-  details.addEventListener("toggle", () => {
-    stageTableOpen = details.open;
-  });
+function mountDisclosures(root) {
+  for (const details of root.querySelectorAll("details[data-keep]")) {
+    const key = details.dataset.keep;
+    details.open = openSections.has(key);
+    details.addEventListener("toggle", () => {
+      if (details.open) openSections.add(key);
+      else openSections.delete(key);
+    });
+  }
 }
 
 function stageTable(result) {
@@ -718,7 +854,7 @@ function stageTable(result) {
   const bankShare = result.stages.reduce((sum, stage) => sum + stage.bankPercent, 0);
 
   return `
-    <details class="stage-table">
+    <details class="stage-table" data-keep="stage-table">
       <summary>Full stage table</summary>
       <p class="section-lead">The same stages, with the spreadsheet’s interest and principal columns. Cash and CPF beyond the first 20% go to the earliest stages first. The rest of each stage is what the bank releases. From each stage, the estimate repays principal and interest on the running total the bank has released, over the full tenure. There is no interest-only period during construction. The monthly figure on the timeline is this repayment, rounded to the nearest dollar.</p>
       <p class="hint">Swipe sideways for the bank's monthly interest, principal and repayment.</p>
@@ -760,13 +896,112 @@ function stageTable(result) {
   `;
 }
 
-function fact(label, value) {
+function incomeLead(result) {
+  const plan = result.fundPlan;
+  const which = plan.choice === "show" ? "show funds" : "pledge funds";
+  const using = plan.notNeeded
+    ? "Income covers the loan, so no show or pledge funds are asked for."
+    : `Show funds and pledge funds are alternatives. The card is using ${which}.`;
+  return `TDSR is the test banks apply to private homes. MSR is shown beside it because HDB and executive condos use 30%. ${using}`;
+}
+
+function renderFunds(result) {
+  const card = document.getElementById("funds");
+  const plan = result.fundPlan;
+  const collapsed = plan.notNeeded && !fundsForcedOpen;
+  card.hidden = false;
+  document.getElementById("funds-quiet").hidden = !collapsed;
+  document.getElementById("funds-body").hidden = collapsed;
+  document.getElementById("funds-notice").textContent = plan.notice || "";
+  if (collapsed) return;
+
+  const fund = plan.active;
+  const formula = plan.choice === "show" ? "income shortfall × 48 ÷ 0.3" : "income shortfall × 48";
+  document.getElementById("fund-kind").textContent = plan.choice === "show"
+    ? "Unpledged. A bank counts these at 30%."
+    : "Locked with your lending bank. Counted in full.";
+  document.getElementById("fund-amount").textContent = fund.amount == null ? "—" : money(fund.amount);
+  const source = document.getElementById("fund-source");
+  const calc = document.getElementById("fund-calc");
+  if (fund.override != null) {
+    source.textContent = "Banker's figure";
+    const calculated = fund.calculated == null ? "—" : money(fund.calculated);
+    calc.textContent = `Calculated: ${calculated} (${formula})`;
+  } else if (fund.calculated == null) {
+    source.textContent = "No repayment to test against.";
+    calc.textContent = "";
+  } else {
+    source.textContent = "Calculated";
+    calc.textContent = "";
+  }
+  document.getElementById("banker-show-field").hidden = plan.choice !== "show";
+  document.getElementById("banker-pledge-field").hidden = plan.choice !== "pledge";
+  document.getElementById("fund-steps").innerHTML = plan.choice === "show" ? showChecklist(plan) : pledgeChecklist(plan);
+  document.getElementById("disbursement-hint").textContent = disbursementHint(plan);
+}
+
+function showChecklist(plan) {
   return `
-    <div>
-      <p class="fact-label">${esc(label)}</p>
-      <p class="fact">${esc(value)}</p>
-    </div>
+    <li>
+      <p class="fund-when">${esc(byDate(plan.applicationBy))}</p>
+      <p>During the loan application, show proof of these funds, such as a bank statement or a screenshot.</p>
+      ${letterNote(plan)}
+    </li>
+    <li>
+      <p class="fund-when">${esc(plan.showReadyBy ? `Have ready by ${formatDate(plan.showReadyBy)}` : "Add the date of the first loan payout")}</p>
+      <p>A few days before the loan is paid out, at the law firm. The firm will tell you the exact day. Have the funds ready at least one week before${plan.disbursement ? ` ${esc(formatDate(plan.disbursement))}` : " the payout"}.</p>
+    </li>
   `;
+}
+
+function pledgeChecklist(plan) {
+  const until = plan.pledgeUntil ? formatDate(plan.pledgeUntil) : null;
+  const about = plan.disbursementOverridden ? "" : "about ";
+  const hold = until
+    ? `Keep them there for at least 4 years, until ${about}${until}.`
+    : "Keep them there for at least 4 years.";
+  return `
+    <li>
+      <p class="fund-when">${esc(byDate(plan.applicationBy))}</p>
+      <p>During the loan application, show a screenshot of these funds in a bank statement.</p>
+      ${letterNote(plan)}
+    </li>
+    <li>
+      <p class="fund-when">${esc(plan.disbursement ? `Before ${formatDate(plan.disbursement)}` : "Before the first loan payout")}</p>
+      <p>Place them in a fixed deposit with your lending bank, and set that up before the loan is paid out. ${esc(hold)}</p>
+    </li>
+  `;
+}
+
+function letterNote(plan) {
+  const from = plan.applicationFrom ? formatDate(plan.applicationFrom) : null;
+  const anchor = plan.mode === "resale" ? "the OTP date" : "the booking date";
+  return `<p class="fund-note">The bank's letter of offer must be signed before you exercise the sale and purchase. Start around ${from ? esc(from) : anchor}.</p>`;
+}
+
+function byDate(iso) {
+  return iso ? `By ${formatDate(iso)}` : "Add a booking or OTP date";
+}
+
+function disbursementHint(plan) {
+  if (!plan.estimatedDisbursement) {
+    return "The timeline has no bank payout yet. A date here is used for the checklist.";
+  }
+  const estimated = `${formatDate(plan.estimatedDisbursement)}${plan.estimatedDisbursementLabel ? `, ${plan.estimatedDisbursementLabel}` : ""}`;
+  if (plan.disbursementOverridden) {
+    return `Using ${formatDate(plan.disbursement)} for these funds. The timeline still estimates the first bank payout on ${estimated}.`;
+  }
+  return `Estimated first payout: ${estimated}. Leave this blank to keep that date.`;
+}
+
+function fundWhy(fund, base) {
+  if (fund.override == null) return base;
+  const calculated = fund.calculated == null ? "—" : money(fund.calculated);
+  return `Banker's figure in use. Calculated: ${calculated}. ${base}`;
+}
+
+function fact(label, value) {
+  return `<p class="fact"><span>${esc(label)}</span>${esc(value)}</p>`;
 }
 
 function line(label, amount, why = "", kind = "", display = null) {

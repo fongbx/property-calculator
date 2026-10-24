@@ -1,6 +1,6 @@
 # Home figures
 
-A plain-language calculator for **one** Singapore private home. It estimates the cash and CPF you need up front, the loan, the monthly repayment, and the salary a bank’s 55% test would ask for.
+A plain-language calculator for **one** Singapore private home. It estimates the cash and CPF for the purchase, when that money is due, the loan, the monthly repayment, and the salary a bank’s 55% test would ask for.
 
 It is for a family working through a purchase together. Cash and CPF stay as one combined total. Nothing on the page is a bank offer or a tax bill.
 
@@ -50,7 +50,7 @@ Other tests cover BSD tier boundaries, ABSD (including a rate that is not on the
 | `test/calc.test.js` | The checks above. |
 | `index.html` | The form, the word list, and the disclaimer. |
 | `app.js` | Reads the form and draws one result. |
-| `styles.css` | Layout. One column on a phone. On a wider screen the figures and the payment timeline span the page, with the inputs beside the breakdown. |
+| `styles.css` | Layout. Key inputs and the three main figures sit at the top. On a phone the timeline stacks. On a wider screen it runs across. |
 
 A later side-by-side view can call `calculateProperty()` once per home, or use `compareProperties([...])`. The screen currently draws one home only.
 
@@ -62,15 +62,19 @@ A later side-by-side view can call `calculateProperty()` once per home, or use `
 - **Option fee** is 5%. Of that, 1.25% is forfeited if you do not exercise, and 3.75% is refundable.
 - **BSD** (Buyer’s Stamp Duty), residential bands: 1% on the first S$180,000, 2% on the next S$180,000, 3% on the next S$640,000, 4% on the next S$500,000, 5% on the next S$1.5 million, 6% above S$3 million.
 - **ABSD** is the price times the rate you pick. The list is 0%, 5%, 20%, 30%, 60%, 65%. Another rate is allowed, with a note that it is not on that list.
-- **Upfront cash / CPF** = 5% option + 15% + BSD + ABSD + a 5% foundation top-up + any extra because the LTV you typed is under 75%. The extra is `max(0, 75% − your LTV) × price`.
+- **Total cash / CPF** = 5% option + 15% + BSD + ABSD + a 5% foundation top-up + any extra because the LTV you typed is under 75%. The extra is `max(0, 75% − your LTV) × price`. It is not all due at booking. Below a 75% LTV, part of it is called stage by stage during construction. The page lists those dates under “When you'll need it”.
 - After the first 20%, the remaining 80% is paid in eight stages (foundation through CSC). Cash beyond that 20% is applied to the **earliest stages first**. The rest of each stage is what the bank releases.
 - From each stage, the monthly figure is a full principal-and-interest repayment on the running total the bank has released, over the whole tenure. The sheet does not use an interest-only period during construction.
 - **IWAA** (income-weighted average age) leans toward whoever earns more. No salary entered means IWAA is 0, tenure is 30 years, and the age-based loan limit stays 75%.
 - Otherwise the longest tenure is the lesser of 30 years and 65 minus IWAA. If IWAA + 30 is over 65, the age-based limit drops to 55%.
 - **Estimated loan** is the lower of “price × the LTV you typed” and “price × the age-based limit”. The monthly repayment uses that loan.
 - **TDSR** minimum salary = (repayment + other monthly debt) / 0.55. **MSR** = repayment / 0.3, and it ignores other debt. MSR is only there for comparison (it is the HDB / executive condo test).
-- **Show funds**: the income gap is how far the salaries you typed sit below the TDSR minimum. With no salary, the whole minimum counts as the gap. Unpledged = gap × 48 / 0.3. Pledged = gap × 48. Both round **up** to the next S$1,000.
-- The upfront total follows the LTV you typed, same as the spreadsheet. If the age rule lends less, that shortfall is shown separately and is not folded into the upfront total.
+- **Show funds** and **pledge funds** are alternatives. You pick one. The income gap is how far the salaries you typed sit below the TDSR minimum. With no salary, the whole minimum counts as the gap. Unpledged = gap × 48 / 0.3. Pledged = gap × 48. Both round **up** to the next S$1,000. These are savings you have to show or lock up. They are not added to the total cash / CPF. The page starts on pledge funds, the smaller amount. The choice is remembered in this browser.
+- If the salaries already cover the TDSR minimum, and you have not typed a banker's figure for the option you picked, the card closes to one line: income covers the loan. You can open it again if the bank still asks.
+- A **banker's figure**, if you type one for the option you picked, replaces that calculated amount on the page and on the timeline. The calculated amount stays underneath in small type. Leave the box blank and the calculation is used. Show and pledge each keep their own figure.
+- Proof is shown during the loan application, by the exercise date. The bank's letter of offer is signed before you exercise. Show funds are then ready at the law firm at least a week before the first loan payout. Pledged funds go into a fixed deposit with your lending bank before that payout, and stay there for at least 4 years.
+- The first payout is the first stage the bank actually pays. At 75% that is foundation. At a lower loan-to-value it can be a later stage, such as the ceiling. On a resale it is completion. A date you type replaces that estimate for the fund checklist only.
+- The total cash / CPF follows the LTV you typed, same as the spreadsheet. If the age rule lends less, that shortfall is shown separately and is not folded into the total.
 
 ## Resale assumptions
 
@@ -81,12 +85,12 @@ These are ordinary private-resale steps. They are not in the spreadsheet.
 - **Stamp duty is due 14 days after exercise.** BSD and ABSD use the same bands and rate as a new launch.
 - **Completion is 10 weeks after exercise.** Private resale completion is often somewhere between 8 and 12 weeks; 10 weeks is the figure this page uses.
 - At completion you pay whatever down payment is left after the 5% deposit. The bank releases the **whole loan at once**, and the monthly repayment starts then. There is no stage table.
-- The loan, TDSR, MSR and show-funds rules are the same as a new launch. The upfront total uses the LTV you typed. If that LTV leaves less than 5% of the price to pay, the page still shows the 1% + 4% deposit and says so.
+- The loan, TDSR, MSR and show-funds rules are the same as a new launch. The total cash / CPF uses the LTV you typed. If that LTV leaves less than 5% of the price to pay, the page still shows the 1% + 4% deposit and says so.
 - Cash and CPF stay one total.
 
 ## Worth knowing
 
-- Above a 75% LTV the spreadsheet still adds the 5% foundation top-up, so the upfront total does not fall any further. The stage table follows the LTV you typed, and above 75% those two totals can disagree. The page says so when it happens. Most bank loans for a private home stop at 75%, or 55% when the loan would run past age 65.
+- Above a 75% LTV the spreadsheet still adds the 5% foundation top-up, so the total cash / CPF does not fall any further. The stage table follows the LTV you typed, and above 75% those two totals can disagree. The page says so when it happens. Most bank loans for a private home stop at 75%, or 55% when the loan would run past age 65.
 - The stage table’s monthly repayments follow the money released at the LTV you typed. The big monthly figure uses the lower, age-based loan when that limit is tighter. They differ only in that case.
 - CPF Ordinary Account contribution is a box on the spreadsheet marked “not used in calculations”, so it is not an input here.
 - IRAS rounds BSD and ABSD **down** to the next dollar (with a minimum of S$1). The spreadsheet, and this page, keep the exact cent. On the S$1,800,000 example there is no difference.
@@ -102,4 +106,4 @@ All payments, dates and salary figures are estimates only. Actual construction m
 
 ## Fonts
 
-Fraunces and Source Sans 3 are included under the SIL Open Font License. See `fonts/OFL.txt`.
+Inter is included under the SIL Open Font License. See `fonts/OFL.txt`. Numbers use tabular figures.

@@ -60,7 +60,7 @@ describe("the spreadsheet example", () => {
     assert.equal(result.salaryEntered, false);
   });
 
-  it("builds upfront cash the way the sheet does", () => {
+  it("builds total cash the way the sheet does", () => {
     assert.equal(result.newLaunch.optionFee, 90_000);
     assert.equal(result.newLaunch.forfeitable, 22_500);
     assert.equal(result.newLaunch.refundable, 67_500);
@@ -148,6 +148,49 @@ describe("the spreadsheet example", () => {
     assert.equal(steps.at(-1).id, "csc");
     assert.equal(steps.at(-1).runningCash, result.totalCashCpf);
     assert.equal(formatMonthYear("2027-04-29"), "Apr 2027");
+  });
+
+  it("splits the total cash by the date it is needed, at 75% LTV", () => {
+    const needed = result.cashNeeded;
+    assert.equal(needed.items[0].id, "within-8-weeks");
+    assert.equal(needed.items[0].label, "Within 8 weeks of booking");
+    assert.equal(needed.items[0].date, "2026-12-26");
+    assert.equal(needed.items[0].amount, 419_600);
+    assert.deepEqual(needed.items[0].parts.map((part) => [part.id, part.label, part.date, part.amount]), [
+      ["option", "5% option", "2026-10-31", 90_000],
+      ["stamp-duty", "Stamp duty", "2026-12-08", 59_600],
+      ["pay-15", "15%", "2026-12-26", 270_000],
+    ]);
+    assert.equal(needed.items[1].id, "foundation");
+    assert.equal(needed.items[1].label, "Foundation");
+    assert.equal(needed.items[1].date, "2027-04-29");
+    assert.equal(needed.items[1].amount, 90_000);
+    assert.equal(needed.items.length, 2);
+    const sum = needed.items.reduce((total, item) => total + item.amount, 0);
+    assert.equal(sum, 509_600);
+    assert.equal(sum, result.totalCashCpf);
+    assert.equal(needed.total, result.totalCashCpf);
+    assert.equal(needed.repaymentsStart.id, "foundation");
+    assert.equal(needed.repaymentsStart.date, "2027-04-29");
+  });
+
+  it("at 55% LTV calls cash through the wall stage, and the bank starts at the ceiling", () => {
+    const lower = calculateProperty({ ...example, ltv: 0.55 });
+    const items = lower.cashNeeded.items;
+    assert.equal(items[0].amount, 419_600);
+    assert.equal(items[0].date, "2026-12-26");
+    assert.deepEqual(items.slice(1).map((item) => [item.id, item.label, item.date, item.amount]), [
+      ["foundation", "Foundation", "2027-04-29", 180_000],
+      ["framework", "Framework", "2027-10-29", 180_000],
+      ["wall", "Wall", "2028-01-29", 90_000],
+    ]);
+    const sum = items.reduce((total, item) => total + item.amount, 0);
+    assert.equal(lower.totalCashCpf, 869_600);
+    assert.equal(sum, 869_600);
+    assert.equal(sum, lower.totalCashCpf);
+    assert.equal(lower.cashNeeded.repaymentsStart.id, "ceiling");
+    assert.equal(lower.cashNeeded.repaymentsStart.date, "2028-04-29");
+    assert.ok(items.every((item) => item.amount > 0));
   });
 
   it("applies the cash waterfall to the foundation stage only, at 75% LTV", () => {
@@ -284,7 +327,7 @@ describe("IWAA, tenure and the age-based LTV", () => {
     assert.equal(result.maxPropertyPrice, 1_320_000);
     assert.ok(Math.abs(result.monthlyRepayment - 4883.7353449944585) < 1e-6);
     assert.ok(result.warnings.some((warning) => warning.code === "iwaa-shortfall"));
-    // Upfront cash still follows the typed 75% LTV, as the spreadsheet does.
+    // Total cash / CPF still follows the typed 75% LTV, as the spreadsheet does.
     assert.equal(result.totalCashCpf, 509_600);
   });
 
@@ -327,6 +370,134 @@ describe("income tests and show funds", () => {
     assert.equal(result.incomeShortfall, 0);
     assert.equal(result.showFundsUnpledged, 0);
     assert.equal(result.showFundsPledged, 0);
+    assert.equal(result.fundPlan.show.override, null);
+    assert.equal(result.fundPlan.show.amount, 0);
+    assert.equal(result.fundPlan.pledge.amount, 0);
+    assert.equal(result.fundPlan.notNeeded, true);
+    assert.equal(result.fundPlan.notice, "No show or pledge funds needed: your income covers the loan");
+    assert.deepEqual(result.fundPlan.markers, []);
+  });
+
+  it("uses pledge funds unless show funds is chosen", () => {
+    const pledge = calculateProperty(example);
+    assert.equal(pledge.fundPlan.choice, "pledge");
+    assert.equal(pledge.fundPlan.active.amount, 563_000);
+    assert.equal(pledge.fundPlan.notNeeded, false);
+    assert.deepEqual(pledge.fundPlan.markers.map((marker) => [marker.id, marker.title, marker.date, marker.whenPrefix]), [
+      ["fund-application", "Loan application: proof of funds", "2026-11-24", "By"],
+      ["fund-before-payout", "Before first loan payout: funds ready / pledge in fixed deposit", "2027-04-29", "Before"],
+    ]);
+
+    const show = calculateProperty({ ...example, fundChoice: "show" });
+    assert.equal(show.fundPlan.choice, "show");
+    assert.equal(show.fundPlan.active.amount, 1_875_000);
+    assert.equal(show.fundPlan.active, show.fundPlan.show);
+    assert.equal(show.fundPlan.markers[1].date, "2027-04-22");
+    assert.equal(show.fundPlan.markers[1].whenPrefix, "Have ready by");
+    assert.equal(show.fundPlan.markers[0].title, "Loan application: proof of funds");
+  });
+
+  it("keeps a banker's figure on the option that was not chosen", () => {
+    const result = calculateProperty({
+      ...example,
+      fundChoice: "pledge",
+      bankerShowFunds: 1_200_000,
+    });
+    assert.equal(result.fundPlan.active.amount, 563_000);
+    assert.equal(result.fundPlan.show.amount, 1_200_000);
+    assert.equal(result.fundPlan.show.override, 1_200_000);
+  });
+
+  it("opens again when income covers the loan but a banker's figure is entered", () => {
+    const result = calculateProperty({
+      ...example,
+      buyers: [{ age: 30, monthlySalary: 20_000 }],
+      fundChoice: "pledge",
+      bankerPledgedFunds: 50_000,
+    });
+    assert.equal(result.incomeShortfall, 0);
+    assert.equal(result.fundPlan.notNeeded, false);
+    assert.equal(result.fundPlan.notice, null);
+    assert.equal(result.fundPlan.active.amount, 50_000);
+    assert.equal(result.fundPlan.active.calculated, 0);
+    assert.equal(result.fundPlan.markers.length, 2);
+  });
+
+  it("uses the calculated show funds when the banker's figure is left blank", () => {
+    const result = calculateProperty({ ...example, bankerShowFunds: "", bankerPledgedFunds: null });
+    assert.equal(result.showFundsUnpledged, 1_875_000);
+    assert.equal(result.showFundsPledged, 563_000);
+    assert.equal(result.fundPlan.show.override, null);
+    assert.equal(result.fundPlan.pledge.override, null);
+    assert.equal(result.fundPlan.show.amount, result.showFundsUnpledged);
+    assert.equal(result.fundPlan.pledge.amount, result.showFundsPledged);
+    assert.equal(result.fundPlan.show.calculated, 1_875_000);
+    assert.equal(result.totalCashCpf, 509_600);
+  });
+
+  it("lets a banker's figure replace the one that is shown, and leaves the other calculated", () => {
+    const result = calculateProperty({
+      ...example,
+      bankerShowFunds: 1_200_000,
+      bankerPledgedFunds: 400_000,
+    });
+    assert.equal(result.showFundsUnpledged, 1_875_000);
+    assert.equal(result.showFundsPledged, 563_000);
+    assert.equal(result.fundPlan.show.calculated, 1_875_000);
+    assert.equal(result.fundPlan.show.override, 1_200_000);
+    assert.equal(result.fundPlan.show.amount, 1_200_000);
+    assert.equal(result.fundPlan.pledge.calculated, 563_000);
+    assert.equal(result.fundPlan.pledge.override, 400_000);
+    assert.equal(result.fundPlan.pledge.amount, 400_000);
+    assert.equal(result.totalCashCpf, 509_600);
+    assert.equal(result.cashNeeded.total, 509_600);
+
+    const onlyPledge = calculateProperty({ ...example, bankerPledgedFunds: 250_000 });
+    assert.equal(onlyPledge.fundPlan.show.amount, 1_875_000);
+    assert.equal(onlyPledge.fundPlan.show.override, null);
+    assert.equal(onlyPledge.fundPlan.pledge.amount, 250_000);
+  });
+
+  it("dates proof by exercise, and the first bank payout at foundation for a 75% loan", () => {
+    const result = calculateProperty(example);
+    assert.equal(result.fundPlan.applicationBy, "2026-11-24");
+    assert.equal(result.fundPlan.applicationFrom, "2026-10-31");
+    assert.equal(result.fundPlan.estimatedDisbursementId, "foundation");
+    assert.equal(result.fundPlan.estimatedDisbursement, "2027-04-29");
+    assert.equal(result.fundPlan.disbursement, "2027-04-29");
+    assert.equal(result.fundPlan.disbursementOverridden, false);
+    assert.equal(result.fundPlan.showReadyBy, "2027-04-22");
+    assert.equal(result.fundPlan.pledgeUntil, "2031-04-29");
+  });
+
+  it("moves the first bank payout to the ceiling at 55% LTV", () => {
+    const result = calculateProperty({ ...example, ltv: 0.55 });
+    assert.equal(result.fundPlan.estimatedDisbursementId, "ceiling");
+    assert.equal(result.fundPlan.estimatedDisbursement, "2028-04-29");
+    assert.equal(result.fundPlan.showReadyBy, "2028-04-22");
+    assert.equal(result.fundPlan.pledgeUntil, "2032-04-29");
+  });
+
+  it("uses completion for a resale, a week before for show funds, and four years for the pledge", () => {
+    const result = calculateProperty({ ...example, mode: "resale", otpDate: "2026-10-31" });
+    assert.equal(result.fundPlan.applicationBy, "2026-11-14");
+    assert.equal(result.fundPlan.applicationFrom, "2026-10-31");
+    assert.equal(result.fundPlan.estimatedDisbursementId, "completion");
+    assert.equal(result.fundPlan.disbursement, "2027-01-23");
+    assert.equal(result.fundPlan.showReadyBy, "2027-01-16");
+    assert.equal(result.fundPlan.pledgeUntil, "2031-01-23");
+  });
+
+  it("follows a typed first-payout date for the fund checklist only", () => {
+    const result = calculateProperty({ ...example, disbursementDate: "2027-06-15" });
+    assert.equal(result.fundPlan.estimatedDisbursement, "2027-04-29");
+    assert.equal(result.fundPlan.estimatedDisbursementId, "foundation");
+    assert.equal(result.fundPlan.disbursementOverridden, true);
+    assert.equal(result.fundPlan.disbursement, "2027-06-15");
+    assert.equal(result.fundPlan.showReadyBy, addDays("2027-06-15", -7));
+    assert.equal(result.fundPlan.showReadyBy, "2027-06-08");
+    assert.equal(result.fundPlan.pledgeUntil, "2031-06-15");
+    assert.equal(result.paymentTimeline.find((step) => step.id === "foundation").date, "2027-04-29");
   });
 
   it("rounds show funds up, and leaves an exact thousand alone", () => {
@@ -436,6 +607,15 @@ describe("resale", () => {
     assert.equal(steps[3].loanDisbursed, 1_350_000);
     assert.equal(steps[3].runningCash, 509_600);
     assert.equal(steps.at(-1).runningCash, result.totalCashCpf);
+    assert.deepEqual(result.cashNeeded.items.map((item) => [item.id, item.date, item.amount]), [
+      ["option", "2026-10-31", 18_000],
+      ["exercise", "2026-11-14", 72_000],
+      ["stamp-duty", "2026-11-28", 59_600],
+      ["completion", "2027-01-23", 360_000],
+    ]);
+    const cashSum = result.cashNeeded.items.reduce((total, item) => total + item.amount, 0);
+    assert.equal(cashSum, result.totalCashCpf);
+    assert.equal(result.cashNeeded.repaymentsStart.date, "2027-01-23");
   });
 
   it("grows the completion cheque when the LTV is under 75%", () => {
