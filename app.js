@@ -7,6 +7,7 @@
 import {
   calculateProperty,
   formatDate,
+  formatMonthYear,
   formatPercent,
   formatSgd,
   formatSgdAuto,
@@ -33,59 +34,97 @@ const DEFAULTS = {
 
 const form = document.querySelector("#planner");
 const summary = document.querySelector("#summary");
+const timeline = document.querySelector("#timeline");
 const detail = document.querySelector("#detail");
 const live = document.querySelector("#live");
 const status = document.querySelector("#status");
 
-const NEW_LAUNCH_COPY = {
-  option: {
-    title: "Pay the 5% option fee",
-    detail: (result) =>
-      `This books the unit. ${money(result.newLaunch.forfeitable)} (1.25%) is forfeited if you do not go ahead. ${money(result.newLaunch.refundable)} (3.75%) is refundable.`,
+/** Stays open across live updates, which replace the timeline markup. */
+let stageTableOpen = false;
+
+const PHASES = {
+  "within-8-weeks": {
+    title: "Within 8 weeks",
+    lead: "Booking through the 15% payment.",
   },
-  "receive-sp": {
-    title: "Receive the Sale & Purchase agreement",
-    detail: () => "Three days after booking. No payment. Send a copy to the banker and the law firm.",
+  "foundation-call": {
+    title: "Call for foundation payment",
+    lead: "Estimated 6 months (180 days) from the launch date. The developer will call for payment progressively.",
   },
-  exercise: {
-    title: "Exercise the Sale & Purchase agreement",
-    detail: () => "21 days after the agreement arrives. The spreadsheet has no separate payment on this day. The further 15% is dated later.",
+  "resale-option": {
+    title: "Option",
+    lead: "The 1% option fee, then 14 days to exercise and pay the rest of the deposit.",
   },
-  "stamp-duty": {
-    title: "Pay stamp duty",
-    detail: () => "14 days after exercise. Buyer's stamp duty plus any ABSD. Cash and CPF together.",
-  },
-  "pay-15": {
-    title: "Pay the further 15%",
-    detail: () => "56 days (8 weeks) after the booking date.",
-  },
-  foundation: {
-    title: "Foundation stage, estimated",
-    detail: () => "180 days after the launch date. The amount is the first row of the stage table below, not a second bill.",
+  "resale-completion": {
+    title: "Stamp duty and completion",
+    lead: "Duty within 14 days of exercise. The rest of the down payment, and the whole loan, at completion.",
   },
 };
 
-const RESALE_COPY = {
+const NEW_LAUNCH_STEPS = {
   option: {
-    title: "Pay the 1% option fee",
-    detail: () => "Paid on the OTP date to receive the Option to Purchase. If you do not exercise, this 1% is normally forfeited.",
+    title: "Pay 5% › receive OTP",
+    payWith: "Cheque / cashier's order",
+    todo: "Confirm law firm details and forward the OTP copy to the banker and the law firm.",
+    timing: "Booking date",
+  },
+  "receive-sp": {
+    title: "Receive S&P",
+    payWith: "No payment this day",
+    todo: "Ensure the letter of offer is signed before meeting the law firm to exercise the S&P.",
+    timing: "3 days from booking",
   },
   exercise: {
-    title: "Exercise the option and pay 4%",
-    detail: () => "14 days later. With the option fee, the deposit is 5%.",
+    title: "Exercise S&P",
+    payWith: "No payment this day",
+    todo: "Ensure the law firm applies CPF for stamp duty to IRAS, and for the 15% payment, if that applies.",
+    timing: "21 days from receiving the S&P",
   },
   "stamp-duty": {
     title: "Pay stamp duty",
-    detail: () => "Due within 14 days of exercise. Buyer's stamp duty plus any ABSD.",
+    payWith: "Cheque / cashier's order / CPF",
+    todo: "Pay the balance of the down payment and the progressive payments.",
+    timing: "14 days from exercise",
+  },
+  "pay-15": {
+    title: "Pay 15%",
+    payWith: "Cheque / cashier's order / CPF",
+    todo: "Completion payment, 8 weeks from booking.",
+    timing: "8 weeks from booking",
+  },
+};
+
+const RESALE_STEPS = {
+  option: {
+    title: "Pay 1% option",
+    payWith: "Cheque / cashier's order",
+    todo: "This takes the option. If you do not exercise, this 1% is normally forfeited.",
+    timing: "OTP date",
+  },
+  exercise: {
+    title: "Exercise and pay 4%",
+    payWith: "Cheque / cashier's order",
+    todo: "With the option fee, the deposit is 5%.",
+    timing: "14 days from the OTP",
+  },
+  "stamp-duty": {
+    title: "Pay stamp duty",
+    payWith: "Cheque / cashier's order / CPF",
+    todo: "Buyer's stamp duty plus any ABSD.",
+    timing: "14 days from exercise",
   },
   completion: {
-    title: "Completion",
-    detail: (result) => {
-      const loan = money(result.estimatedLoan);
-      const monthly = result.monthlyRepayment == null ? "The monthly repayment" : `The monthly repayment of ${money(result.monthlyRepayment)}`;
-      return `10 weeks after exercise. You pay the rest of the down payment, the bank releases ${loan} in one go, and ${monthly.charAt(0).toLowerCase()}${monthly.slice(1)} starts. There is no stage-by-stage drawdown.`;
-    },
+    title: "Completion, with the loan",
+    payWith: "Cash / CPF, and the bank loan",
+    todo: "Pay the rest of the down payment. The bank releases the whole loan and the monthly repayment starts.",
+    timing: "10 weeks after exercise",
   },
+};
+
+const STAGE_NOTES = {
+  foundation: "180 days from the launch date. Same cash as the foundation top-up in the total above — not a second bill.",
+  top: "Temporary occupation. You can move in.",
+  csc: "Legal completion of the project.",
 };
 
 init();
@@ -219,6 +258,8 @@ function draw() {
     return;
   }
   summary.innerHTML = renderSummary(result);
+  timeline.innerHTML = renderPaymentTimeline(result);
+  bindStageTable();
   detail.innerHTML = renderDetail(result);
   live.textContent = [
     `Upfront cash and CPF ${money(result.totalCashCpf)}.`,
@@ -358,6 +399,7 @@ function renderProblems(problems) {
   summary.innerHTML = calm
     ? `<section class="hero"><p class="hero-kicker">Waiting for a price</p><p class="figure-note">${esc(problems[0].message)}</p></section>`
     : `<div class="note">${items}</div>`;
+  timeline.innerHTML = "";
   detail.innerHTML = "";
   live.textContent = problems[0].message;
 }
@@ -444,8 +486,6 @@ function renderDetail(result) {
     cashSection(result),
     loanSection(result),
     incomeSection(result),
-    timelineSection(result),
-    result.mode === "new_launch" ? stageSection(result) : "",
   ].join("");
 }
 
@@ -529,38 +569,136 @@ function incomeSection(result) {
   `;
 }
 
-function timelineSection(result) {
-  const copy = result.mode === "new_launch" ? NEW_LAUNCH_COPY : RESALE_COPY;
-  const items = result.timeline.map((event) => {
-    const text = copy[event.id];
-    const amount = event.amount == null ? "" : `<p class="amount">${esc(money(event.amount))}</p>`;
-    const when = event.date ? formatDate(event.date) : "Add the date";
-    return `
-      <li>
-        <p class="when">${esc(when)}</p>
-        <div>
-          <h3>${esc(text.title)}</h3>
-          ${amount}
-          <p class="hint">${esc(text.detail(result))}</p>
-        </div>
-      </li>
-    `;
-  }).join("");
-
-  const assumption = result.mode === "new_launch"
-    ? "Dates follow the spreadsheet. Sale & Purchase arrives 3 days after booking, exercise is 21 days after that, stamp duty is 14 days after exercise, the 15% is 56 days after booking, and foundation is 180 days after launch. Later stage dates step forward by the months in the table."
-    : "Resale timing is not in the spreadsheet. This page uses a common private-resale practice: 1% option fee, 14 days to exercise and pay 4%, stamp duty 14 days after exercise, and completion 10 weeks after exercise. In practice completion is often somewhere from 8 to 12 weeks. The whole loan is released at completion.";
+function renderPaymentTimeline(result) {
+  const groups = groupPhases(result.paymentTimeline);
+  const phases = groups.map((group) => phaseBlock(result, group)).join("");
+  const lead = result.mode === "new_launch"
+    ? "Same order as the spreadsheet. Pay 5% and receive the OTP, then the S&P, exercise, stamp duty and the 15%, all inside eight weeks. The foundation call is 180 days after launch, and the later stages follow as the building goes up. Cash and CPF so far counts your money only. The bank’s share is shown beside it."
+    : "Same kind of timeline, with the shorter resale steps. These dates are not in the spreadsheet. This page uses a common private-resale practice: 1% on the OTP date, 14 days to exercise and pay 4%, stamp duty 14 days after that, and completion 10 weeks after exercise. Completion is often somewhere from 8 to 12 weeks. The whole loan is released at completion.";
+  const table = result.mode === "new_launch" ? stageTable(result) : "";
 
   return `
-    <section>
-      <h2>${result.mode === "new_launch" ? "Key dates" : "Payment timeline"}</h2>
-      <ol class="timeline">${items}</ol>
-      <div class="assumption"><p>${esc(assumption)}</p></div>
+    <section class="pay-timeline" aria-labelledby="timeline-heading">
+      <h2 id="timeline-heading">Payment timeline</h2>
+      <p class="section-lead">${esc(lead)}</p>
+      ${phases}
+      ${table}
     </section>
   `;
 }
 
-function stageSection(result) {
+function groupPhases(steps) {
+  const groups = [];
+  for (const step of steps) {
+    const last = groups.at(-1);
+    if (!last || last.id !== step.phase) groups.push({ id: step.phase, steps: [step] });
+    else last.steps.push(step);
+  }
+  return groups;
+}
+
+function phaseBlock(result, group) {
+  const phase = PHASES[group.id];
+  const items = group.steps.map((step) => stepCard(result, step)).join("");
+  const hint = group.id === "foundation-call"
+    ? `<p class="scroll-hint">On a wide screen, scroll sideways for the later stages.</p>`
+    : "";
+  return `
+    <section class="phase phase-${esc(group.id)}">
+      <div class="phase-band">
+        <h3>${esc(phase.title)}</h3>
+        <p>${esc(phase.lead)}</p>
+      </div>
+      ${hint}
+      <div class="rail-scroll" tabindex="0" aria-label="${esc(phase.title)}">
+        <ol class="rail">${items}</ol>
+      </div>
+    </section>
+  `;
+}
+
+function stepCard(result, step) {
+  const copy = stepCopy(result, step);
+  const when = !step.date
+    ? "Add the date"
+    : step.kind === "stage"
+      ? formatMonthYear(step.date)
+      : formatDate(step.date);
+  const window = step.windowLabel ? `<p class="window">${esc(step.windowLabel)}</p>` : "";
+  const timing = copy.timing ? `<p class="timing">${esc(copy.timing)}</p>` : "";
+  const todo = copy.todo ? `<p class="todo"><span>To do</span> ${esc(copy.todo)}</p>` : "";
+
+  return `
+    <li class="step">
+      ${window}
+      <p class="step-date">${esc(when)}</p>
+      <h4>${esc(copy.title)}</h4>
+      ${timing}
+      ${step.kind === "stage" ? stageMoney(step) : milestoneMoney(step)}
+      <p class="pay-with">${esc(copy.payWith)}</p>
+      ${todo}
+      <p class="running">Cash / CPF so far <strong>${esc(money(step.runningCash))}</strong></p>
+    </li>
+  `;
+}
+
+function stepCopy(result, step) {
+  if (step.kind === "stage") {
+    const bank = step.bankAmount;
+    const cash = step.cashAmount;
+    let payWith = "Cash / CPF for your share. The bank pays the rest.";
+    if (cash === 0 && bank > 0) payWith = "The bank pays this stage.";
+    else if (bank === 0 && cash > 0) payWith = "Cash / CPF. Nothing from the bank at this stage.";
+    return {
+      title: step.label,
+      payWith,
+      todo: STAGE_NOTES[step.id] || "",
+      timing: step.id === "foundation" ? "180 days from launch" : "",
+    };
+  }
+  const book = result.mode === "new_launch" ? NEW_LAUNCH_STEPS : RESALE_STEPS;
+  return book[step.id];
+}
+
+function milestoneMoney(step) {
+  const due = step.amount == null ? "No payment" : money(step.amount);
+  const loan = step.loanDisbursed == null
+    ? ""
+    : `<p class="loan-line">Loan released <strong>${esc(money(step.loanDisbursed))}</strong></p>`;
+  const repay = step.monthlyRepayment == null
+    ? ""
+    : `<p class="repay">Monthly repayment starts at <strong>${esc(money(step.monthlyRepayment))}</strong></p>`;
+  return `
+    <p class="kicker">Due</p>
+    <p class="step-amount">${esc(due)}</p>
+    ${loan}
+    ${repay}
+  `;
+}
+
+function stageMoney(step) {
+  const repay = step.monthlyRepayment == null ? "—" : money(step.monthlyRepayment);
+  return `
+    <p class="kicker">Est. monthly repayment</p>
+    <p class="step-amount">${esc(repay)}</p>
+    <dl class="split">
+      <div><dt>Stage</dt><dd>${esc(formatPercent(step.percent))}</dd></div>
+      <div><dt>Cash / CPF</dt><dd>${esc(money(step.cashAmount))}</dd></div>
+      <div><dt>Bank</dt><dd>${esc(money(step.bankAmount))}</dd></div>
+    </dl>
+  `;
+}
+
+function bindStageTable() {
+  const details = timeline.querySelector(".stage-table");
+  if (!details) return;
+  details.open = stageTableOpen;
+  details.addEventListener("toggle", () => {
+    stageTableOpen = details.open;
+  });
+}
+
+function stageTable(result) {
   const rows = result.stages.map((stage) => `
     <tr>
       <th scope="row">${esc(stage.label)}</th>
@@ -580,9 +718,9 @@ function stageSection(result) {
   const bankShare = result.stages.reduce((sum, stage) => sum + stage.bankPercent, 0);
 
   return `
-    <section>
-      <h2>Progressive payments</h2>
-      <p class="section-lead">After the first 20%, the remaining 80% is called in these stages. Cash and CPF beyond that 20% are applied to the earliest stages first. Whatever is left in a stage is what the bank releases. From each stage, the estimate assumes you repay principal and interest on the running total the bank has released, over the full tenure — the spreadsheet does not use an interest-only period during construction.</p>
+    <details class="stage-table">
+      <summary>Full stage table</summary>
+      <p class="section-lead">The same stages, with the spreadsheet’s interest and principal columns. Cash and CPF beyond the first 20% go to the earliest stages first. The rest of each stage is what the bank releases. From each stage, the estimate repays principal and interest on the running total the bank has released, over the full tenure. There is no interest-only period during construction. The monthly figure on the timeline is this repayment, rounded to the nearest dollar.</p>
       <p class="hint">Swipe sideways for the bank's monthly interest, principal and repayment.</p>
       <div class="table-scroll" tabindex="0">
         <table>
@@ -618,7 +756,7 @@ function stageSection(result) {
           </tfoot>
         </table>
       </div>
-    </section>
+    </details>
   `;
 }
 

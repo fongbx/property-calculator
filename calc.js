@@ -52,12 +52,12 @@ export const RESALE_TERMS = {
 export const PROGRESSIVE_STAGES = [
   { id: "foundation", label: "Foundation", percent: 0.1, monthsAfterPrevious: 6 },
   { id: "framework", label: "Framework", percent: 0.1, monthsAfterPrevious: 6 },
-  { id: "wall", label: "Walls", percent: 0.05, monthsAfterPrevious: 3 },
+  { id: "wall", label: "Wall", percent: 0.05, monthsAfterPrevious: 3 },
   { id: "ceiling", label: "Ceiling", percent: 0.05, monthsAfterPrevious: 3 },
-  { id: "doors", label: "Doors and windows", percent: 0.05, monthsAfterPrevious: 3 },
+  { id: "doors", label: "Door & window", percent: 0.05, monthsAfterPrevious: 3 },
   { id: "carpark", label: "Car park", percent: 0.05, monthsAfterPrevious: 3 },
-  { id: "top", label: "Temporary occupation (TOP)", percent: 0.25, monthsAfterPrevious: 12 },
-  { id: "csc", label: "Legal completion (CSC)", percent: 0.15, monthsAfterPrevious: 12 },
+  { id: "top", label: "TOP", percent: 0.25, monthsAfterPrevious: 12 },
+  { id: "csc", label: "CSC", percent: 0.15, monthsAfterPrevious: 12 },
 ];
 
 const FULL = 1_000_000; // 100% in millionths, so 5% is 50_000
@@ -243,6 +243,22 @@ export function formatDate(iso) {
   return `${day} ${MONTHS[month - 1]} ${year}`;
 }
 
+/** Stage dates are estimates, so the timeline shows the month and year. */
+export function formatMonthYear(iso) {
+  if (!isIsoDate(iso)) return "—";
+  const [year, month] = iso.split("-").map(Number);
+  return `${MONTHS[month - 1]} ${year}`;
+}
+
+/** Adds cash/CPF paid at each step into a running total. Null payments add nothing. */
+function attachRunningCash(steps) {
+  let cents = 0;
+  return steps.map((step) => {
+    cents += Math.round((step.cashDue || 0) * 100);
+    return { ...step, runningCash: cents / 100 };
+  });
+}
+
 function normalizeBuyers(buyers) {
   const source = Array.isArray(buyers) ? buyers : [];
   return source.map((buyer) => ({
@@ -390,6 +406,7 @@ export function calculateProperty(input = {}) {
   const otpDate = isIsoDate(input.otpDate) ? input.otpDate : null;
 
   let timeline;
+  let paymentTimeline;
   let stages = null;
   let stageCashTotal = null;
   let stageBankTotal = null;
@@ -430,14 +447,41 @@ export function calculateProperty(input = {}) {
       stageCashMatchesTopUp: stageCashCents === foundationCents + additionalCents,
     };
 
+    const receiveDate = bookingDate ? addDays(bookingDate, NEW_LAUNCH_TERMS.daysToReceiveSaleAndPurchase) : null;
+    const stampDate = exerciseDate ? addDays(exerciseDate, NEW_LAUNCH_TERMS.stampDutyDaysAfterExercise) : null;
+    const pay15Date = bookingDate ? addDays(bookingDate, NEW_LAUNCH_TERMS.daysFromBookingToFurtherPayment) : null;
+    const foundationDate = launchDate ? addDays(launchDate, NEW_LAUNCH_TERMS.foundationDaysFromLaunch) : null;
+
     timeline = [
       { id: "option", date: bookingDate, amount: dollars(optionCents) },
-      { id: "receive-sp", date: bookingDate ? addDays(bookingDate, NEW_LAUNCH_TERMS.daysToReceiveSaleAndPurchase) : null, amount: null },
+      { id: "receive-sp", date: receiveDate, amount: null },
       { id: "exercise", date: exerciseDate, amount: null },
-      { id: "stamp-duty", date: exerciseDate ? addDays(exerciseDate, NEW_LAUNCH_TERMS.stampDutyDaysAfterExercise) : null, amount: totalStampDuty },
-      { id: "pay-15", date: bookingDate ? addDays(bookingDate, NEW_LAUNCH_TERMS.daysFromBookingToFurtherPayment) : null, amount: dollars(furtherCents) },
-      { id: "foundation", date: launchDate ? addDays(launchDate, NEW_LAUNCH_TERMS.foundationDaysFromLaunch) : null, amount: null },
+      { id: "stamp-duty", date: stampDate, amount: totalStampDuty },
+      { id: "pay-15", date: pay15Date, amount: dollars(furtherCents) },
+      { id: "foundation", date: foundationDate, amount: null },
     ];
+
+    paymentTimeline = attachRunningCash([
+      milestone("option", "within-8-weeks", bookingDate, dollars(optionCents), null),
+      milestone("receive-sp", "within-8-weeks", receiveDate, null, "Within 2 weeks"),
+      milestone("exercise", "within-8-weeks", exerciseDate, null, "Within 3 weeks"),
+      milestone("stamp-duty", "within-8-weeks", stampDate, totalStampDuty, "Within 2 weeks"),
+      milestone("pay-15", "within-8-weeks", pay15Date, dollars(furtherCents), "Completion"),
+      ...stages.map((stage) => ({
+        id: stage.id,
+        kind: "stage",
+        phase: "foundation-call",
+        date: stage.date,
+        amount: stage.cashAmount,
+        cashDue: stage.cashAmount,
+        cashAmount: stage.cashAmount,
+        bankAmount: stage.bankAmount,
+        percent: stage.percent,
+        label: stage.label,
+        monthlyRepayment: stage.monthlyRepayment,
+        windowLabel: null,
+      })),
+    ]);
   } else {
     const optionCents = portionCents(priceCents, RESALE_TERMS.optionFeeRate);
     const exerciseCents = portionCents(priceCents, RESALE_TERMS.exercisePaymentRate);
@@ -459,10 +503,12 @@ export function calculateProperty(input = {}) {
       depositExceedsDownPayment: downCents < depositCents,
     };
 
+    const stampDate = exerciseDate ? addDays(exerciseDate, RESALE_TERMS.stampDutyDaysAfterExercise) : null;
+
     timeline = [
       { id: "option", date: otpDate, amount: dollars(optionCents) },
       { id: "exercise", date: exerciseDate, amount: dollars(exerciseCents) },
-      { id: "stamp-duty", date: exerciseDate ? addDays(exerciseDate, RESALE_TERMS.stampDutyDaysAfterExercise) : null, amount: totalStampDuty },
+      { id: "stamp-duty", date: stampDate, amount: totalStampDuty },
       {
         id: "completion",
         date: completionDate,
@@ -471,6 +517,17 @@ export function calculateProperty(input = {}) {
         monthlyRepayment: repayment,
       },
     ];
+
+    paymentTimeline = attachRunningCash([
+      milestone("option", "resale-option", otpDate, dollars(optionCents), null),
+      milestone("exercise", "resale-option", exerciseDate, dollars(exerciseCents), "14 days to exercise"),
+      milestone("stamp-duty", "resale-completion", stampDate, totalStampDuty, "Within 14 days of exercise"),
+      {
+        ...milestone("completion", "resale-completion", completionDate, dollars(remainingCents), "10 weeks after exercise"),
+        loanDisbursed: estimatedLoan,
+        monthlyRepayment: repayment,
+      },
+    ]);
   }
 
   return {
@@ -506,11 +563,24 @@ export function calculateProperty(input = {}) {
     showFundsPledged,
     totalCashCpf: dollars(totalCashCents),
     timeline,
+    paymentTimeline,
     stages,
     stageCashTotal,
     stageBankTotal,
     newLaunch,
     resale,
+  };
+}
+
+function milestone(id, phase, date, amount, windowLabel) {
+  return {
+    id,
+    kind: "milestone",
+    phase,
+    date,
+    amount,
+    cashDue: amount ?? 0,
+    windowLabel,
   };
 }
 

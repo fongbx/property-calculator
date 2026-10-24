@@ -18,6 +18,8 @@
       <p class="lede">One property at a time, in plain language. Cash and CPF stay as a single total. Every figure is an estimate, not a bank offer and not a tax bill.</p>
     </header>
 
+    <p class="sr-only" id="live" aria-live="polite"></p>
+
     <div class="layout">
       <form id="planner" autocomplete="off" novalidate>
         <p class="status" id="status"></p>
@@ -202,11 +204,9 @@
         <button type="button" class="quiet" id="restore">Restore the spreadsheet example</button>
       </form>
 
-      <div class="results">
-        <p class="sr-only" id="live" aria-live="polite"></p>
-        <div id="summary"></div>
-        <div id="detail"></div>
-      </div>
+      <div id="summary"></div>
+      <div id="timeline"></div>
+      <div id="detail"></div>
     </div>
 
     <footer class="closing">

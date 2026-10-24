@@ -8,6 +8,7 @@ import {
   calculateProperty,
   compareProperties,
   formatDate,
+  formatMonthYear,
   formatSgd,
   formatSgdAuto,
   ltvFromIwaa,
@@ -82,6 +83,71 @@ describe("the spreadsheet example", () => {
     assert.equal(byId["pay-15"].amount, 270_000);
     assert.equal(byId.foundation.date, "2027-04-29");
     assert.equal(byId.exercise.amount, null);
+  });
+
+  it("lays the sheet's payment timeline out with a running cash total", () => {
+    const steps = result.paymentTimeline;
+    const byId = Object.fromEntries(steps.map((step) => [step.id, step]));
+    assert.deepEqual(steps.map((step) => step.id), [
+      "option",
+      "receive-sp",
+      "exercise",
+      "stamp-duty",
+      "pay-15",
+      "foundation",
+      "framework",
+      "wall",
+      "ceiling",
+      "doors",
+      "carpark",
+      "top",
+      "csc",
+    ]);
+
+    assert.equal(byId.option.phase, "within-8-weeks");
+    assert.equal(byId.option.date, "2026-10-31");
+    assert.equal(byId.option.amount, 90_000);
+    assert.equal(byId.option.runningCash, 90_000);
+
+    assert.equal(byId["receive-sp"].date, "2026-11-03");
+    assert.equal(byId["receive-sp"].amount, null);
+    assert.equal(byId["receive-sp"].windowLabel, "Within 2 weeks");
+    assert.equal(byId["receive-sp"].runningCash, 90_000);
+
+    assert.equal(byId.exercise.date, "2026-11-24");
+    assert.equal(byId.exercise.amount, null);
+    assert.equal(byId.exercise.windowLabel, "Within 3 weeks");
+    assert.equal(byId.exercise.runningCash, 90_000);
+
+    assert.equal(byId["stamp-duty"].date, "2026-12-08");
+    assert.equal(byId["stamp-duty"].amount, 59_600);
+    assert.equal(byId["stamp-duty"].windowLabel, "Within 2 weeks");
+    assert.equal(byId["stamp-duty"].runningCash, 149_600);
+
+    assert.equal(byId["pay-15"].date, "2026-12-26");
+    assert.equal(byId["pay-15"].amount, 270_000);
+    assert.equal(byId["pay-15"].windowLabel, "Completion");
+    assert.equal(byId["pay-15"].phase, "within-8-weeks");
+    assert.equal(byId["pay-15"].runningCash, 419_600);
+
+    assert.equal(byId.foundation.kind, "stage");
+    assert.equal(byId.foundation.phase, "foundation-call");
+    assert.equal(byId.foundation.date, "2027-04-29");
+    assert.equal(byId.foundation.label, "Foundation");
+    assert.equal(byId.foundation.percent, 0.1);
+    assert.equal(byId.foundation.cashAmount, 90_000);
+    assert.equal(byId.foundation.bankAmount, 90_000);
+    assert.equal(byId.foundation.runningCash, 509_600);
+    assert.ok(Math.abs(byId.foundation.monthlyRepayment - 429.6737659189084) < 1e-6);
+
+    assert.equal(byId.framework.date, "2027-10-29");
+    assert.equal(byId.framework.cashAmount, 0);
+    assert.equal(byId.framework.runningCash, 509_600);
+    assert.equal(byId.top.label, "TOP");
+    assert.equal(byId.doors.label, "Door & window");
+    assert.equal(steps.at(-1).id, "csc");
+    assert.equal(steps.at(-1).runningCash, result.totalCashCpf);
+    assert.equal(formatMonthYear("2027-04-29"), "Apr 2027");
   });
 
   it("applies the cash waterfall to the foundation stage only, at 75% LTV", () => {
@@ -287,6 +353,14 @@ describe("LTV below 75% and the stage waterfall", () => {
     assert.deepEqual(bank, [0, 0, 90_000, 90_000, 90_000, 90_000, 450_000, 270_000]);
     assert.equal(result.stageCashTotal, 360_000);
     assert.equal(result.stageBankTotal, 1_080_000);
+
+    const paid = Object.fromEntries(result.paymentTimeline.map((step) => [step.id, step]));
+    assert.equal(paid["pay-15"].runningCash, 419_600);
+    assert.equal(paid.foundation.cashAmount, 180_000);
+    assert.equal(paid.foundation.runningCash, 599_600);
+    assert.equal(paid.framework.cashAmount, 180_000);
+    assert.equal(paid.framework.runningCash, 779_600);
+    assert.equal(result.paymentTimeline.at(-1).runningCash, result.totalCashCpf);
     assert.equal(result.stages[0].monthlyRepayment, 0);
     assert.equal(result.stages[2].cumulativeBank, 90_000);
   });
@@ -347,6 +421,21 @@ describe("resale", () => {
 
     const paid = result.timeline.reduce((sum, event) => sum + event.amount, 0);
     assert.equal(paid, result.totalCashCpf);
+
+    const steps = result.paymentTimeline;
+    assert.deepEqual(steps.map((step) => step.id), ["option", "exercise", "stamp-duty", "completion"]);
+    assert.equal(steps[0].phase, "resale-option");
+    assert.equal(steps[0].runningCash, 18_000);
+    assert.equal(steps[1].amount, 72_000);
+    assert.equal(steps[1].windowLabel, "14 days to exercise");
+    assert.equal(steps[1].runningCash, 90_000);
+    assert.equal(steps[2].phase, "resale-completion");
+    assert.equal(steps[2].date, "2026-11-28");
+    assert.equal(steps[2].runningCash, 149_600);
+    assert.equal(steps[3].windowLabel, "10 weeks after exercise");
+    assert.equal(steps[3].loanDisbursed, 1_350_000);
+    assert.equal(steps[3].runningCash, 509_600);
+    assert.equal(steps.at(-1).runningCash, result.totalCashCpf);
   });
 
   it("grows the completion cheque when the LTV is under 75%", () => {

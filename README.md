@@ -50,13 +50,14 @@ Other tests cover BSD tier boundaries, ABSD (including a rate that is not on the
 | `test/calc.test.js` | The checks above. |
 | `index.html` | The form, the word list, and the disclaimer. |
 | `app.js` | Reads the form and draws one result. |
-| `styles.css` | Layout. One column on a phone, inputs beside the figures on a wider screen. |
+| `styles.css` | Layout. One column on a phone. On a wider screen the figures and the payment timeline span the page, with the inputs beside the breakdown. |
 
 A later side-by-side view can call `calculateProperty()` once per home, or use `compareProperties([...])`. The screen currently draws one home only.
 
 ## New launch, as in the spreadsheet
 
 - **Booking date** starts the early timetable. Sale & Purchase arrives 3 days later. Exercise is 21 days after that. Stamp duty is 14 days after exercise. The further 15% is 56 days (8 weeks) after booking.
+- The page draws that order as one timeline, in the spreadsheet’s two bands: **Within 8 weeks**, then **Call for foundation payment**. Each early step shows the date, the amount, how it can be paid, and the short to-do from the sheet. The construction stages continue on the same timeline (month and year, stage share, cash / CPF, bank, and the monthly repayment after that stage). A running cash / CPF total sits on every step. The full stage table, with interest and principal, is under “Full stage table”.
 - **Launch date** plus 180 days is the foundation stage. Each later stage is dated from the one before, adding the months in that row (the same rule as Excel’s EDATE). The “6 months” on the foundation row is not added on top of the 180 days.
 - **Option fee** is 5%. Of that, 1.25% is forfeited if you do not exercise, and 3.75% is refundable.
 - **BSD** (Buyer’s Stamp Duty), residential bands: 1% on the first S$180,000, 2% on the next S$180,000, 3% on the next S$640,000, 4% on the next S$500,000, 5% on the next S$1.5 million, 6% above S$3 million.
