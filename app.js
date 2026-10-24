@@ -262,10 +262,11 @@ function draw() {
   summary.innerHTML = renderSummary(result);
   timeline.innerHTML = renderPaymentTimeline(result);
   detail.innerHTML = renderDetail(result);
+  mountDisclosures(summary);
   mountDisclosures(timeline);
   mountDisclosures(detail);
   live.textContent = [
-    `Upfront cash and CPF ${money(result.totalCashCpf)}.`,
+    `Total cash and CPF ${money(result.totalCashCpf)}.`,
     `Monthly repayment ${result.monthlyRepayment == null ? "not available" : money(result.monthlyRepayment)}.`,
     `Minimum salary ${result.minSalaryTdsr == null ? "not available" : money(result.minSalaryTdsr)}.`,
   ].join(" ");
@@ -433,17 +434,18 @@ function renderSummary(result) {
   return `
     <section class="results" aria-label="Main figures">
       <div class="figures">
-        <article>
-          <h2>Upfront cash / CPF</h2>
+        <article class="figure-total">
+          <h2>Total cash / CPF</h2>
           <p class="figure">${esc(money(result.totalCashCpf))}</p>
-          <p class="figure-note">Down payment + stamp duty</p>
+          <p class="figure-note">Not all of this is due at booking.</p>
         </article>
-        <article>
+        ${whenNeeded(result)}
+        <article class="figure-monthly">
           <h2>Monthly repayment</h2>
           <p class="figure">${esc(monthly)}</p>
           <p class="figure-note">${esc(tenureNote)}</p>
         </article>
-        <article>
+        <article class="figure-salary">
           <h2>Minimum salary (55% TDSR)</h2>
           <p class="figure">${esc(salary)}</p>
           <p class="figure-note">Combined gross monthly</p>
@@ -459,13 +461,69 @@ function renderSummary(result) {
   `;
 }
 
+function whenNeeded(result) {
+  const needed = result.cashNeeded;
+  if (!needed || needed.items.length === 0) return "";
+  const total = needed.total || result.totalCashCpf;
+  const bar = needed.items.map((item) => {
+    const share = total > 0 ? (item.amount / total) * 100 : 0;
+    return `<span style="width:${share}%"></span>`;
+  }).join("");
+  const rows = needed.items.map((item) => {
+    if (item.kind === "group") {
+      const parts = (item.parts || []).map((part) => `
+        <li>
+          <span>${esc(part.date ? formatDate(part.date) : "Add the date")}</span>
+          <span>${esc(part.label)}</span>
+          <span>${esc(money(part.amount))}</span>
+        </li>
+      `).join("");
+      return `
+        <li>
+          <details class="when-group" data-keep="when-${esc(item.id)}">
+            <summary>
+              <span class="when-when">${esc(item.date ? `By ${formatDate(item.date)}` : "Add the date")}</span>
+              <span class="when-label">${esc(item.label)}</span>
+              <span class="when-amt">${esc(money(item.amount))}</span>
+            </summary>
+            <ul>${parts}</ul>
+          </details>
+        </li>
+      `;
+    }
+    const when = item.date
+      ? (result.mode === "new_launch" ? formatMonthYear(item.date) : formatDate(item.date))
+      : "Add the date";
+    return `
+      <li class="when-row">
+        <span class="when-when">${esc(when)}</span>
+        <span class="when-label">${esc(item.label)}</span>
+        <span class="when-amt">${esc(money(item.amount))}</span>
+      </li>
+    `;
+  }).join("");
+  const start = needed.repaymentsStart;
+  const startLine = start
+    ? `<p class="when-loan">${esc(start.date ? `Loan repayments start around ${formatMonthYear(start.date)}.` : "Loan repayments start when the bank first pays out.")}</p>`
+    : "";
+
+  return `
+    <div class="when">
+      <h3>When you'll need it</h3>
+      <div class="when-bar" aria-hidden="true">${bar}</div>
+      <ol>${rows}</ol>
+      ${startLine}
+    </div>
+  `;
+}
+
 function summaryNotes(result) {
   const blocks = [];
   if (result.warnings.some((warning) => warning.code === "iwaa-shortfall")) {
-    blocks.push(`<p>The age rule cuts the loan to ${esc(formatPercent(result.iwaaLtv))} of the price, ${esc(money(result.ltvShortfall))} less than the LTV you typed. The upfront total follows the LTV you typed, same as the spreadsheet. If the bank uses the lower limit, that shortfall is extra cash or CPF.</p>`);
+    blocks.push(`<p>The age rule cuts the loan to ${esc(formatPercent(result.iwaaLtv))} of the price, ${esc(money(result.ltvShortfall))} less than the LTV you typed. The total cash / CPF follows the LTV you typed, same as the spreadsheet. If the bank uses the lower limit, that shortfall is extra cash or CPF.</p>`);
   }
   if (result.warnings.some((warning) => warning.code === "ltv-above-75")) {
-    blocks.push(`<p>The LTV you typed is above 75%. The spreadsheet still adds a 5% foundation top-up, so the upfront total does not fall any further. The stage table follows the LTV you typed, and above 75% those two can disagree. Most bank loans for a private home stop at 75%, or 55% when the loan would run past age 65.</p>`);
+    blocks.push(`<p>The LTV you typed is above 75%. The spreadsheet still adds a 5% foundation top-up, so the total cash / CPF does not fall any further. The stage table follows the LTV you typed, and above 75% those two can disagree. Most bank loans for a private home stop at 75%, or 55% when the loan would run past age 65.</p>`);
   }
   if (result.warnings.some((warning) => warning.code === "absd-nonstandard")) {
     blocks.push(`<p>${esc(formatPercent(result.absdRate))} is not on the spreadsheet's ABSD list (0%, 5%, 20%, 30%, 60%, 65%). Kept anyway. 35% is a real rate for some buyers, such as a permanent resident buying a third home — confirm it applies to you.</p>`);
@@ -482,7 +540,7 @@ function summaryNotes(result) {
 
 function renderDetail(result) {
   return [
-    fold("cash", "How the upfront total is built", cashSection(result)),
+    fold("cash", "How the total cash / CPF is built", cashSection(result)),
     fold("loan", "The loan, age and LTV", loanSection(result)),
     fold("income", "Salary and show funds", incomeSection(result)),
   ].join("");
@@ -509,7 +567,7 @@ function cashSection(result) {
         ${line(`Additional buyer's stamp duty (ABSD) at ${formatPercent(result.absdRate)}`, result.absd, "Price multiplied by the ABSD rate you chose.")}
         ${line("Foundation top-up", launch.foundationTopUp, "The spreadsheet always includes this 5%. It is the cash piece inside a 75% loan.")}
         ${line("Additional top-up, LTV under 75%", launch.additionalTopUp, "MAX(0, 75% minus your LTV) times the price. Zero when your LTV is 75% or more.")}
-        ${line("Total cash and CPF", result.totalCashCpf, "The sum of the lines above.", "total")}
+        ${line("Total cash / CPF", result.totalCashCpf, "The sum of the lines above. Below 75% LTV, some of it is paid as the building goes up.", "total")}
       </section>
     `;
   }
@@ -523,7 +581,7 @@ function cashSection(result) {
       ${line("Buyer's stamp duty (BSD)", result.bsd, "Same residential steps as a new launch.")}
       ${line(`Additional buyer's stamp duty (ABSD) at ${formatPercent(result.absdRate)}`, result.absd, "Price multiplied by the ABSD rate you chose.")}
       ${line("Rest of the down payment", resale.remainingDownPayment, "Due at completion. This is your LTV's down payment, minus the 5% deposit.")}
-      ${line("Total cash and CPF", result.totalCashCpf, "Deposit, stamp duty and the completion balance.", "total")}
+      ${line("Total cash / CPF", result.totalCashCpf, "Deposit, stamp duty and the completion balance.", "total")}
     </section>
   `;
 }
@@ -633,7 +691,7 @@ function stepAmount(step) {
 }
 
 function stepMeta(step) {
-  const soFar = `so far ${money(step.runningCash)}`;
+  const soFar = `Total cash / CPF so far ${money(step.runningCash)}`;
   if (step.kind === "stage") {
     const bits = [formatPercent(step.percent)];
     if (step.cashAmount > 0 && step.bankAmount > 0) bits.push("cash + bank");

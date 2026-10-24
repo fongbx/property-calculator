@@ -1,6 +1,6 @@
 # Home figures
 
-A plain-language calculator for **one** Singapore private home. It estimates the cash and CPF you need up front, the loan, the monthly repayment, and the salary a bank’s 55% test would ask for.
+A plain-language calculator for **one** Singapore private home. It estimates the cash and CPF for the purchase, when that money is due, the loan, the monthly repayment, and the salary a bank’s 55% test would ask for.
 
 It is for a family working through a purchase together. Cash and CPF stay as one combined total. Nothing on the page is a bank offer or a tax bill.
 
@@ -62,7 +62,7 @@ A later side-by-side view can call `calculateProperty()` once per home, or use `
 - **Option fee** is 5%. Of that, 1.25% is forfeited if you do not exercise, and 3.75% is refundable.
 - **BSD** (Buyer’s Stamp Duty), residential bands: 1% on the first S$180,000, 2% on the next S$180,000, 3% on the next S$640,000, 4% on the next S$500,000, 5% on the next S$1.5 million, 6% above S$3 million.
 - **ABSD** is the price times the rate you pick. The list is 0%, 5%, 20%, 30%, 60%, 65%. Another rate is allowed, with a note that it is not on that list.
-- **Upfront cash / CPF** = 5% option + 15% + BSD + ABSD + a 5% foundation top-up + any extra because the LTV you typed is under 75%. The extra is `max(0, 75% − your LTV) × price`.
+- **Total cash / CPF** = 5% option + 15% + BSD + ABSD + a 5% foundation top-up + any extra because the LTV you typed is under 75%. The extra is `max(0, 75% − your LTV) × price`. It is not all due at booking. Below a 75% LTV, part of it is called stage by stage during construction. The page lists those dates under “When you'll need it”.
 - After the first 20%, the remaining 80% is paid in eight stages (foundation through CSC). Cash beyond that 20% is applied to the **earliest stages first**. The rest of each stage is what the bank releases.
 - From each stage, the monthly figure is a full principal-and-interest repayment on the running total the bank has released, over the whole tenure. The sheet does not use an interest-only period during construction.
 - **IWAA** (income-weighted average age) leans toward whoever earns more. No salary entered means IWAA is 0, tenure is 30 years, and the age-based loan limit stays 75%.
@@ -70,7 +70,7 @@ A later side-by-side view can call `calculateProperty()` once per home, or use `
 - **Estimated loan** is the lower of “price × the LTV you typed” and “price × the age-based limit”. The monthly repayment uses that loan.
 - **TDSR** minimum salary = (repayment + other monthly debt) / 0.55. **MSR** = repayment / 0.3, and it ignores other debt. MSR is only there for comparison (it is the HDB / executive condo test).
 - **Show funds**: the income gap is how far the salaries you typed sit below the TDSR minimum. With no salary, the whole minimum counts as the gap. Unpledged = gap × 48 / 0.3. Pledged = gap × 48. Both round **up** to the next S$1,000.
-- The upfront total follows the LTV you typed, same as the spreadsheet. If the age rule lends less, that shortfall is shown separately and is not folded into the upfront total.
+- The total cash / CPF follows the LTV you typed, same as the spreadsheet. If the age rule lends less, that shortfall is shown separately and is not folded into the total.
 
 ## Resale assumptions
 
@@ -81,12 +81,12 @@ These are ordinary private-resale steps. They are not in the spreadsheet.
 - **Stamp duty is due 14 days after exercise.** BSD and ABSD use the same bands and rate as a new launch.
 - **Completion is 10 weeks after exercise.** Private resale completion is often somewhere between 8 and 12 weeks; 10 weeks is the figure this page uses.
 - At completion you pay whatever down payment is left after the 5% deposit. The bank releases the **whole loan at once**, and the monthly repayment starts then. There is no stage table.
-- The loan, TDSR, MSR and show-funds rules are the same as a new launch. The upfront total uses the LTV you typed. If that LTV leaves less than 5% of the price to pay, the page still shows the 1% + 4% deposit and says so.
+- The loan, TDSR, MSR and show-funds rules are the same as a new launch. The total cash / CPF uses the LTV you typed. If that LTV leaves less than 5% of the price to pay, the page still shows the 1% + 4% deposit and says so.
 - Cash and CPF stay one total.
 
 ## Worth knowing
 
-- Above a 75% LTV the spreadsheet still adds the 5% foundation top-up, so the upfront total does not fall any further. The stage table follows the LTV you typed, and above 75% those two totals can disagree. The page says so when it happens. Most bank loans for a private home stop at 75%, or 55% when the loan would run past age 65.
+- Above a 75% LTV the spreadsheet still adds the 5% foundation top-up, so the total cash / CPF does not fall any further. The stage table follows the LTV you typed, and above 75% those two totals can disagree. The page says so when it happens. Most bank loans for a private home stop at 75%, or 55% when the loan would run past age 65.
 - The stage table’s monthly repayments follow the money released at the LTV you typed. The big monthly figure uses the lower, age-based loan when that limit is tighter. They differ only in that case.
 - CPF Ordinary Account contribution is a box on the spreadsheet marked “not used in calculations”, so it is not an input here.
 - IRAS rounds BSD and ABSD **down** to the next dollar (with a minimum of S$1). The spreadsheet, and this page, keep the exact cent. On the S$1,800,000 example there is no difference.

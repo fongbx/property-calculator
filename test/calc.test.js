@@ -60,7 +60,7 @@ describe("the spreadsheet example", () => {
     assert.equal(result.salaryEntered, false);
   });
 
-  it("builds upfront cash the way the sheet does", () => {
+  it("builds total cash the way the sheet does", () => {
     assert.equal(result.newLaunch.optionFee, 90_000);
     assert.equal(result.newLaunch.forfeitable, 22_500);
     assert.equal(result.newLaunch.refundable, 67_500);
@@ -148,6 +148,49 @@ describe("the spreadsheet example", () => {
     assert.equal(steps.at(-1).id, "csc");
     assert.equal(steps.at(-1).runningCash, result.totalCashCpf);
     assert.equal(formatMonthYear("2027-04-29"), "Apr 2027");
+  });
+
+  it("splits the total cash by the date it is needed, at 75% LTV", () => {
+    const needed = result.cashNeeded;
+    assert.equal(needed.items[0].id, "within-8-weeks");
+    assert.equal(needed.items[0].label, "Within 8 weeks of booking");
+    assert.equal(needed.items[0].date, "2026-12-26");
+    assert.equal(needed.items[0].amount, 419_600);
+    assert.deepEqual(needed.items[0].parts.map((part) => [part.id, part.label, part.date, part.amount]), [
+      ["option", "5% option", "2026-10-31", 90_000],
+      ["stamp-duty", "Stamp duty", "2026-12-08", 59_600],
+      ["pay-15", "15%", "2026-12-26", 270_000],
+    ]);
+    assert.equal(needed.items[1].id, "foundation");
+    assert.equal(needed.items[1].label, "Foundation");
+    assert.equal(needed.items[1].date, "2027-04-29");
+    assert.equal(needed.items[1].amount, 90_000);
+    assert.equal(needed.items.length, 2);
+    const sum = needed.items.reduce((total, item) => total + item.amount, 0);
+    assert.equal(sum, 509_600);
+    assert.equal(sum, result.totalCashCpf);
+    assert.equal(needed.total, result.totalCashCpf);
+    assert.equal(needed.repaymentsStart.id, "foundation");
+    assert.equal(needed.repaymentsStart.date, "2027-04-29");
+  });
+
+  it("at 55% LTV calls cash through the wall stage, and the bank starts at the ceiling", () => {
+    const lower = calculateProperty({ ...example, ltv: 0.55 });
+    const items = lower.cashNeeded.items;
+    assert.equal(items[0].amount, 419_600);
+    assert.equal(items[0].date, "2026-12-26");
+    assert.deepEqual(items.slice(1).map((item) => [item.id, item.label, item.date, item.amount]), [
+      ["foundation", "Foundation", "2027-04-29", 180_000],
+      ["framework", "Framework", "2027-10-29", 180_000],
+      ["wall", "Wall", "2028-01-29", 90_000],
+    ]);
+    const sum = items.reduce((total, item) => total + item.amount, 0);
+    assert.equal(lower.totalCashCpf, 869_600);
+    assert.equal(sum, 869_600);
+    assert.equal(sum, lower.totalCashCpf);
+    assert.equal(lower.cashNeeded.repaymentsStart.id, "ceiling");
+    assert.equal(lower.cashNeeded.repaymentsStart.date, "2028-04-29");
+    assert.ok(items.every((item) => item.amount > 0));
   });
 
   it("applies the cash waterfall to the foundation stage only, at 75% LTV", () => {
@@ -284,7 +327,7 @@ describe("IWAA, tenure and the age-based LTV", () => {
     assert.equal(result.maxPropertyPrice, 1_320_000);
     assert.ok(Math.abs(result.monthlyRepayment - 4883.7353449944585) < 1e-6);
     assert.ok(result.warnings.some((warning) => warning.code === "iwaa-shortfall"));
-    // Upfront cash still follows the typed 75% LTV, as the spreadsheet does.
+    // Total cash / CPF still follows the typed 75% LTV, as the spreadsheet does.
     assert.equal(result.totalCashCpf, 509_600);
   });
 
@@ -436,6 +479,15 @@ describe("resale", () => {
     assert.equal(steps[3].loanDisbursed, 1_350_000);
     assert.equal(steps[3].runningCash, 509_600);
     assert.equal(steps.at(-1).runningCash, result.totalCashCpf);
+    assert.deepEqual(result.cashNeeded.items.map((item) => [item.id, item.date, item.amount]), [
+      ["option", "2026-10-31", 18_000],
+      ["exercise", "2026-11-14", 72_000],
+      ["stamp-duty", "2026-11-28", 59_600],
+      ["completion", "2027-01-23", 360_000],
+    ]);
+    const cashSum = result.cashNeeded.items.reduce((total, item) => total + item.amount, 0);
+    assert.equal(cashSum, result.totalCashCpf);
+    assert.equal(result.cashNeeded.repaymentsStart.date, "2027-01-23");
   });
 
   it("grows the completion cheque when the LTV is under 75%", () => {

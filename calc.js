@@ -564,6 +564,7 @@ export function calculateProperty(input = {}) {
     totalCashCpf: dollars(totalCashCents),
     timeline,
     paymentTimeline,
+    cashNeeded: buildCashNeeded(paymentTimeline, mode),
     stages,
     stageCashTotal,
     stageBankTotal,
@@ -582,6 +583,70 @@ function milestone(id, phase, date, amount, windowLabel) {
     cashDue: amount ?? 0,
     windowLabel,
   };
+}
+
+function buildCashNeeded(steps, mode) {
+  const owing = steps.filter((step) => (step.cashDue || 0) > 0);
+  const items = [];
+
+  if (mode === "new_launch") {
+    const early = owing.filter((step) => step.phase === "within-8-weeks");
+    const later = owing.filter((step) => step.phase !== "within-8-weeks");
+    if (early.length > 0) {
+      items.push({
+        id: "within-8-weeks",
+        kind: "group",
+        label: "Within 8 weeks of booking",
+        date: latestDate(early),
+        amount: sumCash(early),
+        parts: early.map((step) => cashPart(step, mode)),
+      });
+    }
+    for (const step of later) items.push(cashPart(step, mode));
+  } else {
+    for (const step of owing) items.push(cashPart(step, mode));
+  }
+
+  const firstBank = steps.find((step) => (step.bankAmount || 0) > 0 || (step.loanDisbursed || 0) > 0);
+  return {
+    items,
+    total: sumCash(items.map((item) => ({ cashDue: item.amount }))),
+    repaymentsStart: firstBank ? { id: firstBank.id, date: firstBank.date } : null,
+  };
+}
+
+function cashPart(step, mode) {
+  return {
+    id: step.id,
+    kind: "payment",
+    label: cashPartLabel(step, mode),
+    date: step.date,
+    amount: step.cashDue,
+    parts: null,
+  };
+}
+
+function cashPartLabel(step, mode) {
+  if (step.kind === "stage") return step.label;
+  if (step.id === "option") return mode === "resale" ? "1% option" : "5% option";
+  if (step.id === "exercise") return "Exercise, 4%";
+  if (step.id === "pay-15") return "15%";
+  if (step.id === "stamp-duty") return "Stamp duty";
+  if (step.id === "completion") return "Completion";
+  return step.label || step.id;
+}
+
+function latestDate(steps) {
+  return steps.reduce((latest, step) => {
+    if (!step.date) return latest;
+    if (!latest || step.date > latest) return step.date;
+    return latest;
+  }, null);
+}
+
+function sumCash(steps) {
+  const cents = steps.reduce((sum, step) => sum + Math.round((step.cashDue || 0) * 100), 0);
+  return cents / 100;
 }
 
 /** One result per home, in the same order. Used later for a side-by-side view. */
