@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Home figures — Singapore property estimate</title>
+  <meta name="description" content="Estimate upfront cash, the monthly repayment and the salary one Singapore private home needs. New launch or resale.">
+  <meta name="theme-color" content="#16352c">
+  <link rel="icon" href="favicon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#summary">Skip to the figures</a>
+  <div class="page">
+    <header class="mast">
+      <p class="eyebrow">Singapore private home</p>
+      <h1>Home figures</h1>
+      <p class="lede">One property at a time, in plain language. Cash and CPF stay as a single total. Every figure is an estimate, not a bank offer and not a tax bill.</p>
+    </header>
+
+    <div class="layout">
+      <form id="planner" autocomplete="off" novalidate>
+        <p class="status" id="status"></p>
+
+        <fieldset>
+          <legend class="group">The home</legend>
+
+          <div class="field">
+            <p class="label" id="mode-label">Property type</p>
+            <div class="segment" role="radiogroup" aria-labelledby="mode-label">
+              <label class="segment-option">
+                <input type="radio" name="mode" value="new_launch" checked>
+                <span>New launch</span>
+              </label>
+              <label class="segment-option">
+                <input type="radio" name="mode" value="resale">
+                <span>Resale / completed</span>
+              </label>
+            </div>
+            <p class="hint" id="mode-hint">A new launch (still being built) is paid in stages. A resale or completed home is paid on a short timetable.</p>
+          </div>
+
+          <div class="field">
+            <label for="price">Price</label>
+            <div class="affix">
+              <span class="prefix" aria-hidden="true">S$</span>
+              <input id="price" name="price" inputmode="decimal" spellcheck="false" aria-describedby="price-hint price-error" value="1,800,000">
+            </div>
+            <p class="hint" id="price-hint">The purchase price of this one home.</p>
+            <p class="field-error" id="price-error" hidden></p>
+          </div>
+
+          <div id="new-launch-dates">
+            <div class="field">
+              <label for="booking-date">Booking date</label>
+              <input id="booking-date" name="bookingDate" type="date" aria-describedby="booking-hint">
+              <p class="hint" id="booking-hint">The day the 5% option fee is paid and the unit is booked. The other early dates are counted from here.</p>
+            </div>
+            <div class="field">
+              <label for="launch-date">Launch date</label>
+              <input id="launch-date" name="launchDate" type="date" aria-describedby="launch-hint">
+              <p class="hint" id="launch-hint">The project's launch day. Foundation is estimated 180 days after this.</p>
+            </div>
+          </div>
+
+          <div id="resale-dates" hidden>
+            <div class="field">
+              <label for="otp-date">OTP date</label>
+              <input id="otp-date" name="otpDate" type="date" aria-describedby="otp-hint">
+              <p class="hint" id="otp-hint">The day the 1% option fee is paid and you receive the Option to Purchase. Exercise, stamp duty and completion are counted from here.</p>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="absd">ABSD rate</label>
+            <select id="absd" name="absd" aria-describedby="absd-hint absd-error">
+              <option value="0">0%</option>
+              <option value="5">5%</option>
+              <option value="20">20%</option>
+              <option value="30">30%</option>
+              <option value="60">60%</option>
+              <option value="65">65%</option>
+              <option value="other">Other rate…</option>
+            </select>
+            <p class="hint" id="absd-hint">Additional Buyer's Stamp Duty, the extra tax on top of BSD. It depends on citizenship and how many homes are already owned. This list is the spreadsheet's list.</p>
+            <p class="field-error" id="absd-error" hidden></p>
+          </div>
+
+          <div class="field" id="absd-custom-wrap" hidden>
+            <label for="absd-custom">Your ABSD rate</label>
+            <div class="affix">
+              <input id="absd-custom" name="absdCustom" inputmode="decimal" spellcheck="false" aria-describedby="absd-custom-hint">
+              <span aria-hidden="true">%</span>
+            </div>
+            <p class="hint" id="absd-custom-hint">For example 35, if that is the rate that applies. You will see a note because 35 is not on the spreadsheet's short list.</p>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend class="group">The buyers</legend>
+          <p class="hint intro">Up to four people. Income-weighted average age (IWAA) leans toward whoever earns more, and that age sets the longest loan. A row counts only when it has a monthly salary.</p>
+          <div class="buyer">
+            <p class="buyer-name">Buyer 1</p>
+            <div class="field">
+              <label for="age-1">Age</label>
+              <input id="age-1" name="age-1" inputmode="numeric" spellcheck="false" aria-describedby="age-1-error">
+              <p class="field-error" id="age-1-error" hidden></p>
+            </div>
+            <div class="field">
+              <label for="salary-1">Monthly salary</label>
+              <div class="affix">
+                <span class="prefix" aria-hidden="true">S$</span>
+                <input id="salary-1" name="salary-1" inputmode="decimal" spellcheck="false" aria-describedby="salary-1-error">
+              </div>
+              <p class="field-error" id="salary-1-error" hidden></p>
+            </div>
+          </div>
+          <div class="buyer">
+            <p class="buyer-name">Buyer 2</p>
+            <div class="field">
+              <label for="age-2">Age</label>
+              <input id="age-2" name="age-2" inputmode="numeric" spellcheck="false" aria-describedby="age-2-error">
+              <p class="field-error" id="age-2-error" hidden></p>
+            </div>
+            <div class="field">
+              <label for="salary-2">Monthly salary</label>
+              <div class="affix">
+                <span class="prefix" aria-hidden="true">S$</span>
+                <input id="salary-2" name="salary-2" inputmode="decimal" spellcheck="false" aria-describedby="salary-2-error">
+              </div>
+              <p class="field-error" id="salary-2-error" hidden></p>
+            </div>
+          </div>
+          <div class="buyer">
+            <p class="buyer-name">Buyer 3</p>
+            <div class="field">
+              <label for="age-3">Age</label>
+              <input id="age-3" name="age-3" inputmode="numeric" spellcheck="false" aria-describedby="age-3-error">
+              <p class="field-error" id="age-3-error" hidden></p>
+            </div>
+            <div class="field">
+              <label for="salary-3">Monthly salary</label>
+              <div class="affix">
+                <span class="prefix" aria-hidden="true">S$</span>
+                <input id="salary-3" name="salary-3" inputmode="decimal" spellcheck="false" aria-describedby="salary-3-error">
+              </div>
+              <p class="field-error" id="salary-3-error" hidden></p>
+            </div>
+          </div>
+          <div class="buyer">
+            <p class="buyer-name">Buyer 4</p>
+            <div class="field">
+              <label for="age-4">Age</label>
+              <input id="age-4" name="age-4" inputmode="numeric" spellcheck="false" aria-describedby="age-4-error">
+              <p class="field-error" id="age-4-error" hidden></p>
+            </div>
+            <div class="field">
+              <label for="salary-4">Monthly salary</label>
+              <div class="affix">
+                <span class="prefix" aria-hidden="true">S$</span>
+                <input id="salary-4" name="salary-4" inputmode="decimal" spellcheck="false" aria-describedby="salary-4-error">
+              </div>
+              <p class="field-error" id="salary-4-error" hidden></p>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend class="group">The loan</legend>
+
+          <div class="field">
+            <label for="interest">Interest rate</label>
+            <div class="affix">
+              <input id="interest" name="interest" inputmode="decimal" spellcheck="false" value="4" aria-describedby="interest-hint interest-error">
+              <span aria-hidden="true">% a year</span>
+            </div>
+            <p class="hint" id="interest-hint">4% is the spreadsheet's starting point. A bank may offer something else.</p>
+            <p class="field-error" id="interest-error" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="ltv">Loan-to-value (LTV)</label>
+            <div class="affix">
+              <input id="ltv" name="ltv" inputmode="decimal" spellcheck="false" value="75" aria-describedby="ltv-hint ltv-error">
+              <span aria-hidden="true">%</span>
+            </div>
+            <p class="hint" id="ltv-hint">The share of the price you want to borrow. 75% means the bank lends three-quarters, and the rest is cash and CPF together. The cap is often 55% when a 30-year loan would run past age 65.</p>
+            <p class="field-error" id="ltv-error" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="debt">Other monthly debt</label>
+            <div class="affix">
+              <span class="prefix" aria-hidden="true">S$</span>
+              <input id="debt" name="debt" inputmode="decimal" spellcheck="false" aria-describedby="debt-hint debt-error">
+            </div>
+            <p class="hint" id="debt-hint">Car loans, credit cards and other home loans, added up per month. Leave blank if there are none. This is included in the 55% TDSR salary and left out of the 30% MSR comparison.</p>
+            <p class="field-error" id="debt-error" hidden></p>
+          </div>
+        </fieldset>
+
+        <button type="button" class="quiet" id="restore">Restore the spreadsheet example</button>
+      </form>
+
+      <div class="results">
+        <p class="sr-only" id="live" aria-live="polite"></p>
+        <div id="summary"></div>
+        <div id="detail"></div>
+      </div>
+    </div>
+
+    <footer class="closing">
+      <section class="disclaimer" role="note">
+        <h2>These are estimates</h2>
+        <p>All payments, dates and salary figures are estimates only. Actual construction may vary from each project. A bank's letter of offer, the lawyer's completion date and IRAS can all differ from this page. Cash and CPF are not split. This is not advice from a bank, a lawyer or IRAS. Check the figures before anyone pays anything.</p>
+      </section>
+
+      <section class="glossary">
+        <h2>What the words mean</h2>
+        <dl>
+          <div>
+            <dt>BSD — Buyer's Stamp Duty</dt>
+            <dd>Tax on buying the home. It is worked out in steps: 1% on the first S$180,000, then 2%, 3%, 4%, 5% and 6% on each higher slice. A dearer home is not all taxed at the top rate.</dd>
+          </div>
+          <div>
+            <dt>ABSD — Additional Buyer's Stamp Duty</dt>
+            <dd>A second tax, as a flat percentage of the price. A common guide, which you should confirm because profiles differ: Singapore citizen first home 0%, second 20%, third or later 30%; permanent resident first home 5%, second 30%, third or later 35%; foreigner 60%; company or entity 65%. 35% is not in the spreadsheet's dropdown, so type it under Other. Official rates: <a href="https://www.iras.gov.sg/quick-links/tax-rates/stamp-duty">IRAS stamp duty</a>.</dd>
+          </div>
+          <div>
+            <dt>LTV — Loan-to-value</dt>
+            <dd>The share of the price the bank lends. The rest of the price, plus stamp duty, is paid with cash and CPF together.</dd>
+          </div>
+          <div>
+            <dt>IWAA — Income-weighted average age</dt>
+            <dd>The buyers' ages averaged by salary, so a higher earner counts more. If that age plus 30 years would pass 65, the spreadsheet cuts the loan limit from 75% to 55%. With no salary entered, it keeps a 30-year tenure and a 75% limit.</dd>
+          </div>
+          <div>
+            <dt>TDSR — Total Debt Servicing Ratio</dt>
+            <dd>All monthly debt, including this new repayment, should stay within 55% of gross monthly income. The minimum salary here is that repayment plus your other debt, divided by 0.55.</dd>
+          </div>
+          <div>
+            <dt>MSR — Mortgage Servicing Ratio</dt>
+            <dd>A stricter 30% test used for HDB flats and executive condominiums. It is shown only for comparison. It ignores other debt. Divide the repayment by 0.3.</dd>
+          </div>
+          <div>
+            <dt>Show funds</dt>
+            <dd>If income is short of the TDSR salary, a bank may ask to see savings. Unpledged money is only counted at 30%, so the sum is the gap times 48 months, divided by 0.3. Pledged money is locked for 48 months and counted in full: the gap times 48. Both are rounded up to the next S$1,000. With no salary entered, the whole minimum salary is the gap.</dd>
+          </div>
+          <div>
+            <dt>Option fee</dt>
+            <dd>On a new launch the spreadsheet uses 5% to receive the option. Of that, 1.25% is forfeited if you pull out, and 3.75% is refundable. On a resale, this app uses the usual 1% option fee, forfeited if you do not exercise, then 4% when you do.</dd>
+          </div>
+          <div>
+            <dt>TOP and CSC</dt>
+            <dd>Temporary Occupation Permit is when you can move into a new project. CSC is the legal completion certificate. In the stage table they are the last two calls for payment.</dd>
+          </div>
+        </dl>
+      </section>
+    </footer>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
