@@ -328,7 +328,7 @@ function draw() {
   mountDisclosures(detail);
   live.textContent = [
     `Total cash and CPF ${money(result.totalCashCpf)}.`,
-    `Monthly repayment ${result.monthlyRepayment == null ? "not available" : money(result.monthlyRepayment)}.`,
+    `Full monthly repayment ${result.monthlyRepayment == null ? "not available" : money(result.monthlyRepayment)}.`,
     `Minimum salary ${result.minSalaryTdsr == null ? "not available" : money(result.minSalaryTdsr)}.`,
   ].join(" ");
 }
@@ -575,6 +575,7 @@ function renderSummary(result) {
   const tenureLine = result.tenureYears > 0
     ? `${tenureCaption(result.tenureYears)} at ${formatRate(result.annualInterestRate)}`
     : "No usable tenure";
+  const fromLine = fullRepaymentWhen(result);
 
   return `
     <section class="results" aria-label="Main figures">
@@ -586,10 +587,12 @@ function renderSummary(result) {
         </article>
         ${whenNeeded(result)}
         <article class="figure-monthly">
-          <h2>Monthly repayment</h2>
+          <h2>Full monthly repayment</h2>
           <p class="figure">${esc(monthly)}</p>
           <p class="figure-note">${esc(tenureLine)}</p>
+          ${fromLine ? `<p class="figure-note">${esc(fromLine)}</p>` : ""}
         </article>
+        ${growthChart(result)}
         <article class="figure-salary">
           <h2>Minimum salary (55% TDSR)</h2>
           <p class="figure">${esc(salary)}</p>
@@ -603,6 +606,81 @@ function renderSummary(result) {
     </section>
     ${summaryNotes(result)}
   `;
+}
+
+function fullRepaymentWhen(result) {
+  if (!(result.monthlyRepayment > 0)) return "";
+  const from = result.repaymentGrowth?.fullFrom;
+  if (!from) return "";
+  if (result.mode === "resale") {
+    return from.date ? `from completion, about ${formatMonthYear(from.date)}` : "from completion";
+  }
+  return from.date ? `from about ${formatMonthYear(from.date)}` : "from the final stage";
+}
+
+function growthChart(result) {
+  const growth = result.repaymentGrowth;
+  if (result.mode !== "new_launch" || !growth || growth.steps.length === 0) return "";
+
+  const max = Math.max(...growth.steps.map((step) => step.monthlyRepayment));
+  const skipped = growth.paymentsStart && result.stages?.[0] && growth.paymentsStart.id !== result.stages[0].id;
+  const startNote = skipped && growth.paymentsStart.date
+    ? `<p class="hint">Payments start ${esc(formatMonthYear(growth.paymentsStart.date))}.</p>`
+    : "";
+
+  const bars = growth.steps.map((step) => {
+    const pct = Math.max(2, Math.round((step.monthlyRepayment / max) * 1000) / 10);
+    const when = step.date ? formatMonthYear(step.date) : "Date not set";
+    const [month, year] = step.date ? formatMonthYear(step.date).split(" ") : [when, ""];
+    const spoken = `${step.label}, ${when}. Bank has paid ${money(step.cumulativeBank)}. Monthly payment ${money(step.monthlyRepayment)}.`;
+    return `
+      <li>
+        <span class="sr-only">${esc(spoken)}</span>
+        <span class="growth-amt" aria-hidden="true">${esc(chartAmount(step.monthlyRepayment))}</span>
+        <span class="growth-track" aria-hidden="true"><span class="growth-bar" style="height:${pct}%"></span></span>
+        <span class="growth-when" aria-hidden="true"><span>${esc(month)}</span>${year ? `<span>${esc(year)}</span>` : ""}</span>
+      </li>
+    `;
+  }).join("");
+
+  const rows = growth.steps.map((step) => `
+    <tr>
+      <th scope="row">${esc(step.date ? `${step.label}, ${formatMonthYear(step.date)}` : step.label)}</th>
+      <td>${esc(money(step.cumulativeBank))}</td>
+      <td>${esc(money(step.monthlyRepayment))}</td>
+    </tr>
+  `).join("");
+
+  return `
+    <figure class="growth">
+      <figcaption>
+        <h3>How your payment grows</h3>
+        ${startNote}
+      </figcaption>
+      <ol class="growth-bars">${bars}</ol>
+      <p class="hint growth-note">Estimates: full payments (loan + interest) on the amount paid out so far. Some banks charge interest only during construction, which would make early months lower.</p>
+      <details class="growth-table" data-keep="growth-table">
+        <summary>Amounts by stage</summary>
+        <div class="table-scroll" tabindex="0">
+          <table>
+            <caption class="sr-only">Monthly payment after each stage the bank has paid.</caption>
+            <thead>
+              <tr>
+                <th scope="col">From</th>
+                <th scope="col">Bank has paid</th>
+                <th scope="col">Monthly payment</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </details>
+    </figure>
+  `;
+}
+
+function chartAmount(amount) {
+  return formatSgd(amount).replace("S$", "");
 }
 
 function whenNeeded(result) {
@@ -750,7 +828,7 @@ function loanSection(result) {
       ${line("Estimated loan", result.estimatedLoan, "The lower of the two loans. The monthly repayment is based on this.")}
       ${line("LTV shortfall", result.ltvShortfall, "How much less the age rule lends, compared with the LTV you typed.")}
       ${line("Highest price this loan supports", null, "Estimated loan divided by the LTV you typed. It drops below your price when the age rule cuts the loan.", "", priceLine)}
-      ${line("Exact monthly repayment", null, "Salary figures are rounded from this exact amount, not from the already-rounded figure at the top.", "", result.monthlyRepayment == null ? "—" : formatSgd(result.monthlyRepayment, { digits: 2 }))}
+      ${line("Exact full monthly repayment", null, "Salary figures use this full-loan amount. On a new launch the payment is smaller until the bank has paid that loan out.", "", result.monthlyRepayment == null ? "—" : formatSgd(result.monthlyRepayment, { digits: 2 }))}
     </section>
   `;
 }
@@ -759,7 +837,7 @@ function incomeSection(result) {
   return `
     <section>
       <p class="section-lead">${esc(incomeLead(result))}</p>
-      ${line("Monthly repayment", result.monthlyRepayment, "Rounded to the nearest dollar here. The exact amount is in the loan section.", "", result.monthlyRepayment == null ? "—" : money(result.monthlyRepayment))}
+      ${line("Full monthly repayment", result.monthlyRepayment, "Rounded to the nearest dollar here. The exact amount is in the loan section. TDSR and MSR use this full-loan figure.", "", result.monthlyRepayment == null ? "—" : money(result.monthlyRepayment))}
       ${line("Other monthly debt", result.otherMonthlyDebt)}
       ${line("Minimum salary at 55% TDSR", result.minSalaryTdsr, "Repayment plus other debt, divided by 0.55. Rounded to the nearest dollar.")}
       ${line("Minimum salary at 30% MSR", result.minSalaryMsr, "Repayment divided by 0.3. Other debt is not included. For comparison.")}
@@ -845,6 +923,7 @@ function stepCard(result, step) {
       <p class="step-date">${esc(when)}</p>
       <h4>${esc(copy.title)}</h4>
       <p class="step-amount">${esc(stepAmount(step))}</p>
+      ${stepRepay(step)}
       ${stepMeta(step) ? `<p class="meta">${esc(stepMeta(step))}</p>` : ""}
     </li>
   `;
@@ -872,10 +951,15 @@ function markerCard(result, step) {
 function stepAmount(step) {
   if (step.kind === "stage") {
     if (step.cashAmount > 0) return money(step.cashAmount);
-    return step.monthlyRepayment == null ? "" : `${money(step.monthlyRepayment)}/mo`;
+    return "";
   }
   if (!(step.amount > 0)) return "";
   return money(step.amount);
+}
+
+function stepRepay(step) {
+  if (!(step.monthlyRepayment > 0)) return "";
+  return `<p class="step-repay">${esc(money(step.monthlyRepayment))} a month</p>`;
 }
 
 function stepMeta(step) {
@@ -884,14 +968,13 @@ function stepMeta(step) {
     const bits = [formatPercent(step.percent)];
     if (step.cashAmount > 0 && step.bankAmount > 0) bits.push("cash + bank");
     else if (step.bankAmount > 0) bits.push("bank");
-    if (step.cashAmount > 0 && step.monthlyRepayment != null) bits.push(`${money(step.monthlyRepayment)}/mo`);
+    else if (step.cashAmount > 0) bits.push("cash");
     bits.push(soFar);
     return bits.join(" · ");
   }
   if (!(step.amount > 0) && step.loanDisbursed == null) return "";
   const bits = [];
   if (step.loanDisbursed != null) bits.push(`loan ${money(step.loanDisbursed)}`);
-  if (step.monthlyRepayment != null) bits.push(`${money(step.monthlyRepayment)}/mo`);
   bits.push(soFar);
   return bits.join(" · ");
 }
@@ -958,7 +1041,7 @@ function stageTable(result) {
   return `
     <details class="stage-table" data-keep="stage-table">
       <summary>Full stage table</summary>
-      <p class="section-lead">The same stages, with the spreadsheet’s interest and principal columns. Cash and CPF beyond the first 20% go to the earliest stages first. The rest of each stage is what the bank releases. From each stage, the estimate repays principal and interest on the running total the bank has released, over the tenure chosen above. There is no interest-only period during construction. The monthly figure on the timeline is this repayment, rounded to the nearest dollar.</p>
+      <p class="section-lead">The same stages, with the spreadsheet’s interest and principal columns. Cash and CPF beyond the first 20% go to the earliest stages first. The rest of each stage is what the bank releases. From each stage, the estimate repays principal and interest on the running total the bank has released, over the tenure chosen above. Estimates: full payments (loan + interest) on the amount paid out so far. Some banks charge interest only during construction, which would make early months lower. The monthly figure on the timeline is this repayment, rounded to the nearest dollar.</p>
       <p class="hint">Swipe sideways for the bank's monthly interest, principal and repayment.</p>
       <div class="table-scroll" tabindex="0">
         <table>

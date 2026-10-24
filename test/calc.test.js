@@ -433,6 +433,86 @@ describe("a chosen loan tenure", () => {
   });
 });
 
+describe("how the monthly payment grows", () => {
+  it("starts the full repayment at CSC on the 30-year example", () => {
+    const result = calculateProperty(example);
+    assert.equal(result.repaymentGrowth.fullFrom.id, "csc");
+    assert.equal(result.repaymentGrowth.fullFrom.date, "2030-10-29");
+    assert.equal(formatMonthYear(result.repaymentGrowth.fullFrom.date), "Oct 2030");
+    assert.equal(result.repaymentGrowth.paymentsStart.id, "foundation");
+    assert.deepEqual(
+      result.repaymentGrowth.steps.map((step) => [step.label, formatMonthYear(step.date), Math.round(step.monthlyRepayment), step.cumulativeBank]),
+      [
+        ["Foundation", "Apr 2027", 430, 90_000],
+        ["Framework", "Oct 2027", 1_289, 270_000],
+        ["Wall", "Jan 2028", 1_719, 360_000],
+        ["Ceiling", "Apr 2028", 2_148, 450_000],
+        ["Door & window", "Jul 2028", 2_578, 540_000],
+        ["Car park", "Oct 2028", 3_008, 630_000],
+        ["TOP", "Oct 2029", 5_156, 1_080_000],
+        ["CSC", "Oct 2030", 6_445, 1_350_000],
+      ],
+    );
+    assert.equal(Math.round(result.repaymentGrowth.steps.at(-1).monthlyRepayment), Math.round(result.monthlyRepayment));
+  });
+
+  it("leaves out stages before the first bank payout at 55% LTV", () => {
+    const result = calculateProperty({ ...example, ltv: 0.55 });
+    assert.equal(result.repaymentGrowth.paymentsStart.id, "ceiling");
+    assert.equal(result.repaymentGrowth.paymentsStart.date, "2028-04-29");
+    assert.equal(formatMonthYear(result.repaymentGrowth.paymentsStart.date), "Apr 2028");
+    assert.equal(Math.round(result.repaymentGrowth.steps[0].monthlyRepayment), 430);
+    assert.equal(result.repaymentGrowth.steps[0].cumulativeBank, 90_000);
+    assert.equal(result.repaymentGrowth.fullFrom.id, "csc");
+    assert.equal(result.repaymentGrowth.fullFrom.date, "2030-10-29");
+    assert.equal(Math.round(result.repaymentGrowth.steps.at(-1).monthlyRepayment), 4_726);
+    assert.equal(Math.round(result.monthlyRepayment), 4_726);
+    assert.equal(result.repaymentGrowth.steps.length, 5);
+    assert.ok(result.repaymentGrowth.steps.every((step) => step.cumulativeBank > 0));
+    assert.ok(!result.repaymentGrowth.steps.some((step) => step.id === "foundation" || step.id === "wall"));
+  });
+
+  it("puts a resale's full repayment at completion, with no stage list", () => {
+    const result = calculateProperty({
+      mode: "resale",
+      price: 1_800_000,
+      otpDate: "2026-10-31",
+      absdRate: 0,
+      ltv: 0.75,
+      annualInterestRate: 0.04,
+    });
+    assert.equal(result.repaymentGrowth.steps.length, 0);
+    assert.equal(result.repaymentGrowth.fullFrom.id, "completion");
+    assert.equal(result.repaymentGrowth.fullFrom.date, "2027-01-23");
+    assert.equal(formatMonthYear(result.repaymentGrowth.fullFrom.date), "Jan 2027");
+    assert.equal(Math.round(result.monthlyRepayment), 6_445);
+  });
+
+  it("raises every stage payment when the tenure is shorter, and keeps the dates", () => {
+    const full = calculateProperty(example);
+    const shorter = calculateProperty({ ...example, tenureYears: 25 });
+    assert.equal(shorter.repaymentGrowth.fullFrom.date, "2030-10-29");
+    assert.equal(shorter.repaymentGrowth.steps.length, full.repaymentGrowth.steps.length);
+    shorter.repaymentGrowth.steps.forEach((step, index) => {
+      assert.equal(step.date, full.repaymentGrowth.steps[index].date);
+      assert.ok(step.monthlyRepayment > full.repaymentGrowth.steps[index].monthlyRepayment);
+    });
+    assert.equal(Math.round(shorter.repaymentGrowth.steps.at(-1).monthlyRepayment), 7_126);
+    assert.equal(Math.round(shorter.monthlyRepayment), 7_126);
+  });
+
+  it("dates the full repayment from the stage that first covers a smaller age-based loan", () => {
+    const result = calculateProperty({
+      ...example,
+      buyers: [{ age: 40, monthlySalary: 10_000 }],
+    });
+    assert.equal(result.estimatedLoan, 990_000);
+    assert.equal(result.repaymentGrowth.fullFrom.id, "top");
+    assert.equal(result.repaymentGrowth.fullFrom.date, "2029-10-29");
+    assert.ok(result.repaymentGrowth.steps.at(-1).cumulativeBank > result.estimatedLoan);
+  });
+});
+
 describe("income tests and show funds", () => {
   it("includes other debt in TDSR and leaves it out of MSR", () => {
     const result = calculateProperty({ ...example, otherMonthlyDebt: 500 });

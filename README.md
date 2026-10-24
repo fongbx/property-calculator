@@ -34,7 +34,7 @@ The main example (new launch, price S$1,800,000, LTV 75%, interest 4%, ABSD 0%, 
 | --- | --- |
 | Total cash / CPF | S$509,600 |
 | Loan | S$1,350,000 |
-| Monthly repayment | S$6,445 (nearest dollar) |
+| Full monthly repayment | S$6,445 (nearest dollar), from about Oct 2030 |
 | Minimum salary at 55% TDSR | S$11,718 |
 | Minimum salary at 30% MSR | S$21,484 |
 | Show funds, unpledged | S$1,875,000 |
@@ -64,7 +64,7 @@ A later side-by-side view can call `calculateProperty()` once per home, or use `
 - **ABSD** is the price times the rate you pick. The list is 0%, 5%, 20%, 30%, 60%, 65%. Another rate is allowed, with a note that it is not on that list.
 - **Total cash / CPF** = 5% option + 15% + BSD + ABSD + a 5% foundation top-up + any extra because the LTV you typed is under 75%. The extra is `max(0, 75% − your LTV) × price`. It is not all due at booking. Below a 75% LTV, part of it is called stage by stage during construction. The page lists those dates under “When you'll need it”.
 - After the first 20%, the remaining 80% is paid in eight stages (foundation through CSC). Cash beyond that 20% is applied to the **earliest stages first**. The rest of each stage is what the bank releases.
-- From each stage, the monthly figure is a full principal-and-interest repayment on the running total the bank has released, over the tenure chosen. The sheet does not use an interest-only period during construction.
+- From each stage, the monthly figure is a full principal-and-interest repayment on the running total the bank has released, over the tenure chosen. On the S$1,800,000 example at 75% that starts at about S$430 in Apr 2027 and reaches the full S$6,445 at CSC, about Oct 2030. At 55% the first payment is about S$430 in Apr 2028 and the full amount is about S$4,726. Some banks charge interest only during construction, which would make the early months lower. The salary tests use the full repayment.
 - **IWAA** (income-weighted average age) leans toward whoever earns more. No salary entered means IWAA is 0, the longest tenure is 30 years, and the age-based loan limit stays 75%.
 - Otherwise the longest tenure is the lesser of 30 years and 65 minus IWAA. The page starts on that maximum. A shorter tenure can be chosen, in whole years, down to 5 and not past the maximum. The monthly repayment, the TDSR and MSR salaries, the income shortfall and the show or pledge funds follow the years chosen. If IWAA + 30 is over 65, the age-based limit drops to 55%. That 75% or 55% cut follows the age, not a shorter tenure.
 - **Estimated loan** is the lower of “price × the LTV you typed” and “price × the age-based limit”. The monthly repayment uses that loan, over the tenure chosen.
