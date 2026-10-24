@@ -34,6 +34,7 @@ const DEFAULTS = {
   bankerPledge: "",
   disbursementDate: "",
   fundChoice: "pledge",
+  tenureYears: "",
 };
 
 const form = document.querySelector("#planner");
@@ -42,7 +43,14 @@ const timeline = document.querySelector("#timeline");
 const detail = document.querySelector("#detail");
 const live = document.querySelector("#live");
 const status = document.querySelector("#status");
-const tenureOut = document.querySelector("#tenure-out");
+const tenureInput = document.querySelector("#tenure");
+const tenureHint = document.querySelector("#tenure-hint");
+const tenureNote = document.querySelector("#tenure-note");
+
+/** Blank tenure means "use the current maximum", so a later age can still move it. */
+let tenureFollowsMax = true;
+/** Stays up after a clamp until the tenure field is focused again. */
+let tenureClampMessage = "";
 
 /** Which disclosures stay open when the figures are redrawn. */
 const openSections = new Set();
@@ -154,6 +162,24 @@ function init() {
     const choice = form.elements["fund-choice"].value === "show" ? "banker-show" : "banker-pledge";
     document.getElementById(choice).focus();
   });
+  tenureInput.addEventListener("focus", () => {
+    tenureClampMessage = "";
+    tenureNote.hidden = true;
+    tenureNote.textContent = "";
+  });
+  tenureInput.addEventListener("blur", () => {
+    const raw = tenureInput.value.trim();
+    if (raw === "") {
+      tenureFollowsMax = true;
+      tenureClampMessage = "";
+      onEdit();
+      return;
+    }
+    if (tenureFollowsMax) return;
+    const value = Number(raw);
+    if (Number.isFinite(value)) tenureInput.value = String(Math.round(value));
+    onEdit();
+  });
   for (const id of ["price", "debt", "salary-1", "salary-2", "salary-3", "salary-4", "banker-show", "banker-pledge"]) {
     document.getElementById(id).addEventListener("blur", () => {
       const input = document.getElementById(id);
@@ -165,7 +191,10 @@ function init() {
   draw();
 }
 
-function onEdit() {
+function onEdit(event) {
+  if (event?.target?.id === "tenure") {
+    tenureFollowsMax = event.target.value.trim() === "";
+  }
   persist(collectState());
   draw();
 }
@@ -200,6 +229,9 @@ function applyState(state) {
   form.elements["banker-pledge"].value = state.bankerPledge ?? "";
   form.elements["disbursement-date"].value = state.disbursementDate ?? "";
   form.elements["fund-choice"].value = state.fundChoice === "show" ? "show" : "pledge";
+  tenureFollowsMax = String(state.tenureYears ?? "").trim() === "";
+  tenureClampMessage = "";
+  tenureInput.value = tenureFollowsMax ? "" : state.tenureYears;
   state.ages.forEach((age, index) => {
     form.elements[`age-${index + 1}`].value = age ?? "";
   });
@@ -227,6 +259,7 @@ function collectState() {
     bankerPledge: form.elements["banker-pledge"].value,
     disbursementDate: form.elements["disbursement-date"].value,
     fundChoice: form.elements["fund-choice"].value === "show" ? "show" : "pledge",
+    tenureYears: tenureFollowsMax ? "" : tenureInput.value,
   };
 }
 
@@ -261,6 +294,7 @@ function normalizeState(state) {
     bankerPledge: state.bankerPledge.trim(),
     disbursementDate: state.disbursementDate,
     fundChoice: state.fundChoice === "show" ? "show" : "pledge",
+    tenureYears: String(state.tenureYears ?? "").trim(),
   };
 }
 
@@ -284,7 +318,7 @@ function draw() {
     renderProblems(result.errors);
     return;
   }
-  showTenure(result.maxTenureYears);
+  syncTenure(result);
   summary.innerHTML = renderSummary(result);
   renderFunds(result);
   timeline.innerHTML = renderPaymentTimeline(result);
@@ -333,6 +367,11 @@ function interpret(state) {
     absdRate = Number(state.absd) / 100;
   }
 
+  const tenureYears = tenureFollowsMax ? null : tenureYearsFromField(state.tenureYears);
+  if (!tenureFollowsMax && Number.isNaN(tenureYears)) {
+    problems.push({ field: "tenure", message: "Loan tenure needs to be a number of years." });
+  }
+
   const buyers = [1, 2, 3, 4].map((n) => {
     const ageRaw = state.ages[n - 1].trim();
     const salaryRaw = state.salaries[n - 1].trim();
@@ -364,8 +403,16 @@ function interpret(state) {
       bankerPledgedFunds: bankerPledge,
       disbursementDate: state.disbursementDate || null,
       fundChoice: state.fundChoice,
+      tenureYears,
     },
   };
+}
+
+function tenureYearsFromField(raw) {
+  const cleaned = String(raw ?? "").trim().replace(/,/g, "");
+  if (cleaned === "") return null;
+  const value = Number(cleaned);
+  return Number.isFinite(value) ? value : NaN;
 }
 
 function optionalMoney(raw, field, message, problems) {
@@ -440,14 +487,69 @@ function showFieldErrors(problems) {
   }
 }
 
-function showTenure(years) {
-  if (!(years > 0)) {
-    tenureOut.textContent = "—";
-    return;
-  }
+function formatTenureField(years) {
+  if (!(years > 0) || !Number.isFinite(years)) return "";
   const rounded = Math.round(years * 10) / 10;
-  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-  tenureOut.textContent = `${text} yrs`;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function tenureCaption(years) {
+  const text = formatTenureField(years);
+  return text ? `${text} yrs` : "";
+}
+
+function clampSentence(result) {
+  const used = formatTenure(result.tenureYears);
+  if (result.tenureClampReason === "below-min" && result.tenureYears >= 5) {
+    return "5 years is the shortest, so that is what this uses.";
+  }
+  if (result.tenureClampReason === "below-min") {
+    return `Brought up to ${used}, the longest for these ages.`;
+  }
+  if (result.salaryEntered) {
+    return `Brought down to ${used}, the longest for these ages.`;
+  }
+  return `Brought down to ${used}. That is the longest with no ages entered.`;
+}
+
+function syncTenure(result) {
+  const focused = document.activeElement === tenureInput;
+  if (!(result.maxTenureYears > 0)) {
+    tenureHint.textContent = "No tenure is available at these ages.";
+    tenureInput.disabled = true;
+    tenureInput.removeAttribute("min");
+    tenureInput.removeAttribute("max");
+    if (!focused) tenureInput.value = "";
+    tenureFollowsMax = true;
+    tenureClampMessage = "";
+  } else {
+    tenureInput.disabled = false;
+    const floor = Math.min(5, result.maxTenureYears);
+    tenureInput.min = String(floor);
+    tenureInput.max = String(result.maxTenureYears);
+    tenureHint.textContent = result.salaryEntered
+      ? `Max ${formatTenure(result.maxTenureYears)} (from ages).`
+      : `Max ${formatTenure(result.maxTenureYears)}.`;
+
+    if (focused && result.tenureClampReason === "above-max") {
+      tenureInput.value = formatTenureField(result.tenureYears);
+      tenureFollowsMax = false;
+      tenureClampMessage = clampSentence(result);
+      persist(collectState());
+    } else if (!focused && tenureFollowsMax) {
+      tenureInput.value = formatTenureField(result.maxTenureYears);
+    } else if (!focused && result.tenureClamped) {
+      tenureInput.value = formatTenureField(result.tenureYears);
+      tenureFollowsMax = false;
+      tenureClampMessage = clampSentence(result);
+      persist(collectState());
+    } else if (focused && result.tenureClampReason !== "above-max") {
+      tenureClampMessage = "";
+    }
+  }
+
+  tenureNote.hidden = tenureClampMessage === "";
+  tenureNote.textContent = tenureClampMessage;
 }
 
 function formatRate(rate) {
@@ -458,7 +560,6 @@ function formatRate(rate) {
 function renderProblems(problems) {
   const calm = problems.every((problem) => problem.calm);
   const items = problems.map((problem) => `<p>${esc(problem.message)}</p>`).join("");
-  showTenure(null);
   summary.innerHTML = calm
     ? `<section class="results"><p class="result-line">${esc(problems[0].message)}</p></section>`
     : `<div class="note">${items}</div>`;
@@ -471,8 +572,8 @@ function renderProblems(problems) {
 function renderSummary(result) {
   const monthly = result.monthlyRepayment == null ? "—" : money(result.monthlyRepayment);
   const salary = result.minSalaryTdsr == null ? "—" : money(result.minSalaryTdsr);
-  const tenureNote = result.maxTenureYears > 0
-    ? `${tenureOut.textContent} at ${formatRate(result.annualInterestRate)}`
+  const tenureLine = result.tenureYears > 0
+    ? `${tenureCaption(result.tenureYears)} at ${formatRate(result.annualInterestRate)}`
     : "No usable tenure";
 
   return `
@@ -487,7 +588,7 @@ function renderSummary(result) {
         <article class="figure-monthly">
           <h2>Monthly repayment</h2>
           <p class="figure">${esc(monthly)}</p>
-          <p class="figure-note">${esc(tenureNote)}</p>
+          <p class="figure-note">${esc(tenureLine)}</p>
         </article>
         <article class="figure-salary">
           <h2>Minimum salary (55% TDSR)</h2>
@@ -642,8 +743,9 @@ function loanSection(result) {
       ${line("LTV you typed", null, `${formatPercent(result.enteredLtv)} of the price.`, "", formatPercent(result.enteredLtv))}
       ${line("Loan at that LTV", result.loanAtEnteredLtv)}
       ${line("Income-weighted average age", null, "Each buyer's age, weighted by monthly salary. Blank rows are ignored.", "", iwaaText)}
-      ${line("Max loan tenure", null, result.iwaa === 0 ? "30 years when the weighted age is 0, including when no salary is entered." : "The lesser of 30 years and 65 minus the weighted age.", "", formatTenure(result.maxTenureYears))}
-      ${line("Age-based LTV limit", null, "55% if the weighted age plus 30 years is over 65. Otherwise 75%.", "", formatPercent(result.iwaaLtv))}
+      ${line("Max loan tenure", null, result.iwaa === 0 ? "30 years when no salary is entered. A shorter tenure can be chosen above, down to 5 years. The repayment, the salary tests and the show or pledge funds follow that choice." : "The lesser of 30 years and 65 minus the weighted age. A shorter tenure can be chosen above, down to 5 years, and not past this maximum.", "", formatTenure(result.maxTenureYears))}
+      ${line("Tenure used", null, "The years the repayment is worked out on. It starts at the maximum until a shorter one is chosen.", "", result.tenureYears > 0 ? formatTenure(result.tenureYears) : "—")}
+      ${line("Age-based LTV limit", null, "55% if the weighted age plus 30 years is over 65. Otherwise 75%. This follows the age, not a shorter tenure.", "", formatPercent(result.iwaaLtv))}
       ${line("Loan at the age-based limit", result.loanAtIwaaLtv)}
       ${line("Estimated loan", result.estimatedLoan, "The lower of the two loans. The monthly repayment is based on this.")}
       ${line("LTV shortfall", result.ltvShortfall, "How much less the age rule lends, compared with the LTV you typed.")}
@@ -856,7 +958,7 @@ function stageTable(result) {
   return `
     <details class="stage-table" data-keep="stage-table">
       <summary>Full stage table</summary>
-      <p class="section-lead">The same stages, with the spreadsheet’s interest and principal columns. Cash and CPF beyond the first 20% go to the earliest stages first. The rest of each stage is what the bank releases. From each stage, the estimate repays principal and interest on the running total the bank has released, over the full tenure. There is no interest-only period during construction. The monthly figure on the timeline is this repayment, rounded to the nearest dollar.</p>
+      <p class="section-lead">The same stages, with the spreadsheet’s interest and principal columns. Cash and CPF beyond the first 20% go to the earliest stages first. The rest of each stage is what the bank releases. From each stage, the estimate repays principal and interest on the running total the bank has released, over the tenure chosen above. There is no interest-only period during construction. The monthly figure on the timeline is this repayment, rounded to the nearest dollar.</p>
       <p class="hint">Swipe sideways for the bank's monthly interest, principal and repayment.</p>
       <div class="table-scroll" tabindex="0">
         <table>

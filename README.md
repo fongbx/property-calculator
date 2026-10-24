@@ -28,7 +28,7 @@ node --test
 
 `npm test` runs the same command.
 
-The main example (new launch, price S$1,800,000, LTV 75%, interest 4%, ABSD 0%, no ages or salaries so the tenure stays 30 years, no other debt) is asserted as:
+The main example (new launch, price S$1,800,000, LTV 75%, interest 4%, ABSD 0%, no ages or salaries so the tenure stays at its 30-year maximum, no other debt) is asserted as:
 
 | Figure | Amount |
 | --- | --- |
@@ -64,10 +64,10 @@ A later side-by-side view can call `calculateProperty()` once per home, or use `
 - **ABSD** is the price times the rate you pick. The list is 0%, 5%, 20%, 30%, 60%, 65%. Another rate is allowed, with a note that it is not on that list.
 - **Total cash / CPF** = 5% option + 15% + BSD + ABSD + a 5% foundation top-up + any extra because the LTV you typed is under 75%. The extra is `max(0, 75% − your LTV) × price`. It is not all due at booking. Below a 75% LTV, part of it is called stage by stage during construction. The page lists those dates under “When you'll need it”.
 - After the first 20%, the remaining 80% is paid in eight stages (foundation through CSC). Cash beyond that 20% is applied to the **earliest stages first**. The rest of each stage is what the bank releases.
-- From each stage, the monthly figure is a full principal-and-interest repayment on the running total the bank has released, over the whole tenure. The sheet does not use an interest-only period during construction.
-- **IWAA** (income-weighted average age) leans toward whoever earns more. No salary entered means IWAA is 0, tenure is 30 years, and the age-based loan limit stays 75%.
-- Otherwise the longest tenure is the lesser of 30 years and 65 minus IWAA. If IWAA + 30 is over 65, the age-based limit drops to 55%.
-- **Estimated loan** is the lower of “price × the LTV you typed” and “price × the age-based limit”. The monthly repayment uses that loan.
+- From each stage, the monthly figure is a full principal-and-interest repayment on the running total the bank has released, over the tenure chosen. The sheet does not use an interest-only period during construction.
+- **IWAA** (income-weighted average age) leans toward whoever earns more. No salary entered means IWAA is 0, the longest tenure is 30 years, and the age-based loan limit stays 75%.
+- Otherwise the longest tenure is the lesser of 30 years and 65 minus IWAA. The page starts on that maximum. A shorter tenure can be chosen, in whole years, down to 5 and not past the maximum. The monthly repayment, the TDSR and MSR salaries, the income shortfall and the show or pledge funds follow the years chosen. If IWAA + 30 is over 65, the age-based limit drops to 55%. That 75% or 55% cut follows the age, not a shorter tenure.
+- **Estimated loan** is the lower of “price × the LTV you typed” and “price × the age-based limit”. The monthly repayment uses that loan, over the tenure chosen.
 - **TDSR** minimum salary = (repayment + other monthly debt) / 0.55. **MSR** = repayment / 0.3, and it ignores other debt. MSR is only there for comparison (it is the HDB / executive condo test).
 - **Show funds** and **pledge funds** are alternatives. You pick one. The income gap is how far the salaries you typed sit below the TDSR minimum. With no salary, the whole minimum counts as the gap. Unpledged = gap × 48 / 0.3. Pledged = gap × 48. Both round **up** to the next S$1,000. These are savings you have to show or lock up. They are not added to the total cash / CPF. The page starts on pledge funds, the smaller amount. The choice is remembered in this browser.
 - If the salaries already cover the TDSR minimum, and you have not typed a banker's figure for the option you picked, the card closes to one line: income covers the loan. You can open it again if the bank still asks.

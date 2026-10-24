@@ -93,9 +93,14 @@
         </div>
 
         <div class="field field-tenure">
-          <span class="label" id="tenure-label">Loan tenure</span>
-          <output id="tenure-out" aria-labelledby="tenure-label" aria-describedby="tenure-hint">30 years</output>
-          <p class="hint sr-only" id="tenure-hint">Calculated from the buyers' ages and salaries. It stays 30 years when no salary is entered. Ages and salaries are under More details.</p>
+          <label for="tenure">Loan tenure</label>
+          <div class="affix">
+            <input id="tenure" name="tenure" type="number" inputmode="decimal" min="5" max="30" step="any" value="30" spellcheck="false" aria-describedby="tenure-hint tenure-note tenure-error">
+            <span aria-hidden="true">yrs</span>
+          </div>
+          <p class="hint" id="tenure-hint">Max 30 years.</p>
+          <p class="hint" id="tenure-note" hidden></p>
+          <p class="field-error" id="tenure-error" hidden></p>
         </div>
       </div>
 
@@ -174,7 +179,7 @@
 
           <fieldset class="buyers">
             <legend>Buyers</legend>
-            <p class="hint">Up to four people. A row counts when it has a monthly salary. The weighted age sets the longest loan, and it is shown as loan tenure above.</p>
+            <p class="hint">Up to four people. A row counts when it has a monthly salary. The weighted age sets the longest tenure you can choose above.</p>
             <div class="buyer">
               <p class="buyer-name">Buyer 1</p>
               <div class="field">
@@ -282,7 +287,7 @@
           </div>
           <div>
             <dt>IWAA — Income-weighted average age</dt>
-            <dd>The buyers' ages averaged by salary, so a higher earner counts more. If that age plus 30 years would pass 65, the spreadsheet cuts the loan limit from 75% to 55%. With no salary entered, it keeps a 30-year tenure and a 75% limit.</dd>
+            <dd>The buyers' ages averaged by salary, so a higher earner counts more. That age sets the longest tenure you can choose: the lesser of 30 years and 65 minus the age. You can pick fewer years, down to 5, and not past that maximum. If that age plus 30 years would pass 65, the spreadsheet cuts the loan limit from 75% to 55%. The 75% or 55% cut follows the age, not the years you pick. With no salary entered, the longest tenure is 30 years and the limit stays 75%.</dd>
           </div>
           <div>
             <dt>TDSR — Total Debt Servicing Ratio</dt>

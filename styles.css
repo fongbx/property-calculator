@@ -222,6 +222,21 @@ summary:focus-visible,
   outline: none;
 }
 
+.affix input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.affix input[type="number"]::-webkit-outer-spin-button,
+.affix input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.affix input:disabled {
+  color: var(--muted);
+}
+
 .affix .prefix,
 .affix span[aria-hidden="true"] {
   color: var(--muted);
