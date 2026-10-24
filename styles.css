@@ -161,6 +161,7 @@ select,
 output {
   width: 100%;
   height: 34px;
+  min-width: 0;
   padding: 0 0.55rem;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
@@ -773,10 +774,20 @@ select {
   padding: 0.15rem 0 0.85rem;
 }
 
-.date-row {
+.key-dates {
+  grid-column: 1 / -1;
+}
+
+.key-dates .date-row {
   display: grid;
-  gap: 0.65rem;
-  margin-bottom: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 0.75rem;
+  margin: 0;
+}
+
+.key-dates .hint {
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 fieldset {
@@ -1174,9 +1185,8 @@ tfoot td {
     font-size: 28px;
   }
 
-  .date-row {
-    grid-template-columns: 1fr 1fr;
-    max-width: 36rem;
+  .key-dates .date-row {
+    max-width: 34rem;
   }
 
   .scroll-hint {
@@ -1243,12 +1253,12 @@ tfoot td {
     grid-template-columns: 1fr 1fr;
   }
 
-  .field-mode,
-  .field:first-child {
+  .input-bar > .field-mode,
+  .input-bar > .field:first-child {
     grid-column: 1 / -1;
   }
 
-  .field:nth-child(2) {
+  .input-bar > .field:nth-child(2) {
     grid-column: 1 / -1;
   }
 }
