@@ -50,7 +50,7 @@ Other tests cover BSD tier boundaries, ABSD (including a rate that is not on the
 | `test/calc.test.js` | The checks above. |
 | `index.html` | The form, the word list, and the disclaimer. |
 | `app.js` | Reads the form and draws one result. |
-| `styles.css` | Layout. One column on a phone. On a wider screen the figures and the payment timeline span the page, with the inputs beside the breakdown. |
+| `styles.css` | Layout. Key inputs and the three main figures sit at the top. On a phone the timeline stacks. On a wider screen it runs across. |
 
 A later side-by-side view can call `calculateProperty()` once per home, or use `compareProperties([...])`. The screen currently draws one home only.
 
@@ -102,4 +102,4 @@ All payments, dates and salary figures are estimates only. Actual construction m
 
 ## Fonts
 
-Fraunces and Source Sans 3 are included under the SIL Open Font License. See `fonts/OFL.txt`.
+Inter is included under the SIL Open Font License. See `fonts/OFL.txt`. Numbers use tabular figures.

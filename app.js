@@ -38,9 +38,10 @@ const timeline = document.querySelector("#timeline");
 const detail = document.querySelector("#detail");
 const live = document.querySelector("#live");
 const status = document.querySelector("#status");
+const tenureOut = document.querySelector("#tenure-out");
 
-/** Stays open across live updates, which replace the timeline markup. */
-let stageTableOpen = false;
+/** Which disclosures stay open when the figures are redrawn. */
+const openSections = new Set();
 
 const PHASES = {
   "within-8-weeks": {
@@ -63,7 +64,7 @@ const PHASES = {
 
 const NEW_LAUNCH_STEPS = {
   option: {
-    title: "Pay 5% › receive OTP",
+    title: "Pay 5%",
     payWith: "Cheque / cashier's order",
     todo: "Confirm law firm details and forward the OTP copy to the banker and the law firm.",
     timing: "Booking date",
@@ -81,7 +82,7 @@ const NEW_LAUNCH_STEPS = {
     timing: "21 days from receiving the S&P",
   },
   "stamp-duty": {
-    title: "Pay stamp duty",
+    title: "Stamp duty",
     payWith: "Cheque / cashier's order / CPF",
     todo: "Pay the balance of the down payment and the progressive payments.",
     timing: "14 days from exercise",
@@ -96,25 +97,25 @@ const NEW_LAUNCH_STEPS = {
 
 const RESALE_STEPS = {
   option: {
-    title: "Pay 1% option",
+    title: "Pay 1%",
     payWith: "Cheque / cashier's order",
     todo: "This takes the option. If you do not exercise, this 1% is normally forfeited.",
     timing: "OTP date",
   },
   exercise: {
-    title: "Exercise and pay 4%",
+    title: "Exercise + 4%",
     payWith: "Cheque / cashier's order",
     todo: "With the option fee, the deposit is 5%.",
     timing: "14 days from the OTP",
   },
   "stamp-duty": {
-    title: "Pay stamp duty",
+    title: "Stamp duty",
     payWith: "Cheque / cashier's order / CPF",
     todo: "Buyer's stamp duty plus any ABSD.",
     timing: "14 days from exercise",
   },
   completion: {
-    title: "Completion, with the loan",
+    title: "Completion",
     payWith: "Cash / CPF, and the bank loan",
     todo: "Pay the rest of the down payment. The bank releases the whole loan and the monthly repayment starts.",
     timing: "10 weeks after exercise",
@@ -241,8 +242,8 @@ function draw() {
   const state = collectState();
   syncVisibility(state);
   status.textContent = sameAsExample(state)
-    ? "These boxes match the spreadsheet's example. Change anything — the figures update as you type, and stay on this device."
-    : "Figures update as you type and stay in this browser. They are not sent anywhere.";
+    ? "Spreadsheet example. Figures update as you type."
+    : "Figures update as you type and stay in this browser.";
 
   const { input, problems } = interpret(state);
   showFieldErrors(problems);
@@ -257,10 +258,12 @@ function draw() {
     renderProblems(result.errors);
     return;
   }
+  showTenure(result.maxTenureYears);
   summary.innerHTML = renderSummary(result);
   timeline.innerHTML = renderPaymentTimeline(result);
-  bindStageTable();
   detail.innerHTML = renderDetail(result);
+  mountDisclosures(timeline);
+  mountDisclosures(detail);
   live.textContent = [
     `Upfront cash and CPF ${money(result.totalCashCpf)}.`,
     `Monthly repayment ${result.monthlyRepayment == null ? "not available" : money(result.monthlyRepayment)}.`,
@@ -393,11 +396,27 @@ function showFieldErrors(problems) {
   }
 }
 
+function showTenure(years) {
+  if (!(years > 0)) {
+    tenureOut.textContent = "—";
+    return;
+  }
+  const rounded = Math.round(years * 10) / 10;
+  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  tenureOut.textContent = `${text} yrs`;
+}
+
+function formatRate(rate) {
+  if (!Number.isFinite(rate)) return "—";
+  return `${(Math.round(rate * 10000) / 100).toFixed(2)}%`;
+}
+
 function renderProblems(problems) {
   const calm = problems.every((problem) => problem.calm);
   const items = problems.map((problem) => `<p>${esc(problem.message)}</p>`).join("");
+  showTenure(null);
   summary.innerHTML = calm
-    ? `<section class="hero"><p class="hero-kicker">Waiting for a price</p><p class="figure-note">${esc(problems[0].message)}</p></section>`
+    ? `<section class="results"><p class="result-line">${esc(problems[0].message)}</p></section>`
     : `<div class="note">${items}</div>`;
   timeline.innerHTML = "";
   detail.innerHTML = "";
@@ -407,61 +426,41 @@ function renderProblems(problems) {
 function renderSummary(result) {
   const monthly = result.monthlyRepayment == null ? "—" : money(result.monthlyRepayment);
   const salary = result.minSalaryTdsr == null ? "—" : money(result.minSalaryTdsr);
-  const modeLabel = result.mode === "new_launch" ? "New launch" : "Resale / completed";
-  const tenureBit = result.maxTenureYears > 0 ? formatTenure(result.maxTenureYears) : "no usable tenure";
+  const tenureNote = result.maxTenureYears > 0
+    ? `${tenureOut.textContent} at ${formatRate(result.annualInterestRate)}`
+    : "No usable tenure";
 
   return `
-    <section class="hero">
-      <p class="hero-kicker">${esc(modeLabel)} · ${esc(money(result.price))} · ${esc(formatPercent(result.enteredLtv))} LTV · ${esc(formatPercent(result.annualInterestRate))} interest · ${esc(tenureBit)}</p>
+    <section class="results" aria-label="Main figures">
       <div class="figures">
         <article>
-          <h2>Upfront cash and CPF</h2>
+          <h2>Upfront cash / CPF</h2>
           <p class="figure">${esc(money(result.totalCashCpf))}</p>
-          <p class="figure-note">Option fee, stamp duty and your cash share of the price, as one total.</p>
+          <p class="figure-note">Down payment + stamp duty</p>
         </article>
         <article>
           <h2>Monthly repayment</h2>
           <p class="figure">${esc(monthly)}</p>
-          <p class="figure-note">${esc(monthlyNote(result))}</p>
+          <p class="figure-note">${esc(tenureNote)}</p>
         </article>
         <article>
-          <h2>Minimum salary, 55% TDSR</h2>
+          <h2>Minimum salary (55% TDSR)</h2>
           <p class="figure">${esc(salary)}</p>
-          <p class="figure-note">${esc(salaryNote(result))}</p>
+          <p class="figure-note">Combined gross monthly</p>
         </article>
       </div>
-    </section>
-    <section class="facts" aria-label="More of the main figures">
-      ${fact("Loan used for the repayment", result.estimatedLoan == null ? "—" : money(result.estimatedLoan))}
-      ${fact("Minimum salary, 30% MSR", result.minSalaryMsr == null ? "—" : money(result.minSalaryMsr))}
-      ${fact("Show funds, unpledged", result.showFundsUnpledged == null ? "—" : money(result.showFundsUnpledged))}
-      ${fact("Show funds, pledged 48 months", result.showFundsPledged == null ? "—" : money(result.showFundsPledged))}
+      <div class="facts" aria-label="More of the main figures">
+        ${fact("Loan", result.estimatedLoan == null ? "—" : money(result.estimatedLoan))}
+        ${fact("Stamp duty", money(result.totalStampDuty))}
+        ${fact("Show funds (pledged)", result.showFundsPledged == null ? "—" : money(result.showFundsPledged))}
+      </div>
     </section>
     ${summaryNotes(result)}
   `;
 }
 
-function monthlyNote(result) {
-  if (!(result.maxTenureYears > 0)) {
-    return "The weighted age leaves no positive loan tenure in the spreadsheet, so there is no repayment to show.";
-  }
-  const exact = formatSgd(result.monthlyRepayment, { digits: 2 });
-  return `Rounded to the nearest dollar. The exact estimate is ${exact}, on the loan over ${formatTenure(result.maxTenureYears)} at ${formatPercent(result.annualInterestRate)}.`;
-}
-
-function salaryNote(result) {
-  if (result.minSalaryTdsr == null) return "Salary tests need a repayment first.";
-  if (result.otherMonthlyDebt > 0) {
-    return `Gross monthly income so this repayment plus ${money(result.otherMonthlyDebt)} of other debt stays within 55%.`;
-  }
-  return "Gross monthly income so this repayment stays within 55%. No other monthly debt is entered.";
-}
-
 function summaryNotes(result) {
   const blocks = [];
-  if (!result.salaryEntered && result.showFundsUnpledged > 0) {
-    blocks.push(`<p>No monthly salary has been entered, so the whole minimum salary is treated as a gap. These show-funds amounts are what that gap implies. Add each buyer's salary and they shrink or drop to zero.</p>`);
-  }
   if (result.warnings.some((warning) => warning.code === "iwaa-shortfall")) {
     blocks.push(`<p>The age rule cuts the loan to ${esc(formatPercent(result.iwaaLtv))} of the price, ${esc(money(result.ltvShortfall))} less than the LTV you typed. The upfront total follows the LTV you typed, same as the spreadsheet. If the bank uses the lower limit, that shortfall is extra cash or CPF.</p>`);
   }
@@ -483,10 +482,14 @@ function summaryNotes(result) {
 
 function renderDetail(result) {
   return [
-    cashSection(result),
-    loanSection(result),
-    incomeSection(result),
+    fold("cash", "How the upfront total is built", cashSection(result)),
+    fold("loan", "The loan, age and LTV", loanSection(result)),
+    fold("income", "Salary and show funds", incomeSection(result)),
   ].join("");
+}
+
+function fold(key, title, body) {
+  return `<details class="fold" data-keep="${esc(key)}"><summary>${esc(title)}</summary><div class="fold-body">${body}</div></details>`;
 }
 
 function cashSection(result) {
@@ -497,7 +500,6 @@ function cashSection(result) {
       : "Above a 75% LTV the spreadsheet still adds the 5% foundation top-up, while the stage table follows the LTV you typed. Do not add the two totals together.";
     return `
       <section>
-        <h2>How the upfront total is built</h2>
         <p class="section-lead">${esc(match)}</p>
         ${line("Option fee, 5%", launch.optionFee, "Paid on the booking date to receive the option.")}
         ${line("Of which 1.25% is forfeitable", launch.forfeitable, "Kept by the developer if you do not exercise.", "sub")}
@@ -515,7 +517,6 @@ function cashSection(result) {
   const resale = result.resale;
   return `
     <section>
-      <h2>How the upfront total is built</h2>
       <p class="section-lead">Resale cash is the 5% deposit, stamp duty, and whatever down payment is still left at completion. Cash and CPF stay together.</p>
       ${line("Option fee, 1%", resale.optionFee, "Paid on the OTP date. Normally forfeited if you do not exercise.")}
       ${line("Exercise payment, 4%", resale.exercisePayment, "14 days later. Brings the deposit to 5%.")}
@@ -536,8 +537,7 @@ function loanSection(result) {
     : "No salary entered";
   return `
     <section>
-      <h2>The loan</h2>
-      <p class="section-lead">The repayment uses the lower of the loan you asked for and the age-based limit. That is the spreadsheet's "estimated loan".</p>
+      <p class="section-lead">The repayment uses the lower of the loan you asked for and the age-based limit. That is the spreadsheet's estimated loan.</p>
       ${line("LTV you typed", null, `${formatPercent(result.enteredLtv)} of the price.`, "", formatPercent(result.enteredLtv))}
       ${line("Loan at that LTV", result.loanAtEnteredLtv)}
       ${line("Income-weighted average age", null, "Each buyer's age, weighted by monthly salary. Blank rows are ignored.", "", iwaaText)}
@@ -547,7 +547,7 @@ function loanSection(result) {
       ${line("Estimated loan", result.estimatedLoan, "The lower of the two loans. The monthly repayment is based on this.")}
       ${line("LTV shortfall", result.ltvShortfall, "How much less the age rule lends, compared with the LTV you typed.")}
       ${line("Highest price this loan supports", null, "Estimated loan divided by the LTV you typed. It drops below your price when the age rule cuts the loan.", "", priceLine)}
-      ${line("Exact monthly repayment", null, "Salary figures are rounded from this exact amount, not from the already-rounded figure in the green panel.", "", result.monthlyRepayment == null ? "—" : formatSgd(result.monthlyRepayment, { digits: 2 }))}
+      ${line("Exact monthly repayment", null, "Salary figures are rounded from this exact amount, not from the already-rounded figure at the top.", "", result.monthlyRepayment == null ? "—" : formatSgd(result.monthlyRepayment, { digits: 2 }))}
     </section>
   `;
 }
@@ -555,7 +555,6 @@ function loanSection(result) {
 function incomeSection(result) {
   return `
     <section>
-      <h2>Salary and show funds</h2>
       <p class="section-lead">TDSR is the test banks apply to private homes. MSR is shown beside it because HDB and executive condos use 30%.</p>
       ${line("Monthly repayment", result.monthlyRepayment, "Rounded to the nearest dollar here. The exact amount is in the loan section.", "", result.monthlyRepayment == null ? "—" : money(result.monthlyRepayment))}
       ${line("Other monthly debt", result.otherMonthlyDebt)}
@@ -572,16 +571,13 @@ function incomeSection(result) {
 function renderPaymentTimeline(result) {
   const groups = groupPhases(result.paymentTimeline);
   const phases = groups.map((group) => phaseBlock(result, group)).join("");
-  const lead = result.mode === "new_launch"
-    ? "Same order as the spreadsheet. Pay 5% and receive the OTP, then the S&P, exercise, stamp duty and the 15%, all inside eight weeks. The foundation call is 180 days after launch, and the later stages follow as the building goes up. Cash and CPF so far counts your money only. The bank’s share is shown beside it."
-    : "Same kind of timeline, with the shorter resale steps. These dates are not in the spreadsheet. This page uses a common private-resale practice: 1% on the OTP date, 14 days to exercise and pay 4%, stamp duty 14 days after that, and completion 10 weeks after exercise. Completion is often somewhere from 8 to 12 weeks. The whole loan is released at completion.";
   const table = result.mode === "new_launch" ? stageTable(result) : "";
 
   return `
     <section class="pay-timeline" aria-labelledby="timeline-heading">
       <h2 id="timeline-heading">Payment timeline</h2>
-      <p class="section-lead">${esc(lead)}</p>
       ${phases}
+      ${stepNotes(result)}
       ${table}
     </section>
   `;
@@ -600,16 +596,9 @@ function groupPhases(steps) {
 function phaseBlock(result, group) {
   const phase = PHASES[group.id];
   const items = group.steps.map((step) => stepCard(result, step)).join("");
-  const hint = group.id === "foundation-call"
-    ? `<p class="scroll-hint">On a wide screen, scroll sideways for the later stages.</p>`
-    : "";
   return `
     <section class="phase phase-${esc(group.id)}">
-      <div class="phase-band">
-        <h3>${esc(phase.title)}</h3>
-        <p>${esc(phase.lead)}</p>
-      </div>
-      ${hint}
+      <h3 class="phase-label">${esc(phase.title)}</h3>
       <div class="rail-scroll" tabindex="0" aria-label="${esc(phase.title)}">
         <ol class="rail">${items}</ol>
       </div>
@@ -624,22 +613,52 @@ function stepCard(result, step) {
     : step.kind === "stage"
       ? formatMonthYear(step.date)
       : formatDate(step.date);
-  const window = step.windowLabel ? `<p class="window">${esc(step.windowLabel)}</p>` : "";
-  const timing = copy.timing ? `<p class="timing">${esc(copy.timing)}</p>` : "";
-  const todo = copy.todo ? `<p class="todo"><span>To do</span> ${esc(copy.todo)}</p>` : "";
-
   return `
     <li class="step">
-      ${window}
       <p class="step-date">${esc(when)}</p>
       <h4>${esc(copy.title)}</h4>
-      ${timing}
-      ${step.kind === "stage" ? stageMoney(step) : milestoneMoney(step)}
-      <p class="pay-with">${esc(copy.payWith)}</p>
-      ${todo}
-      <p class="running">Cash / CPF so far <strong>${esc(money(step.runningCash))}</strong></p>
+      <p class="step-amount">${esc(stepAmount(step))}</p>
+      ${stepMeta(step) ? `<p class="meta">${esc(stepMeta(step))}</p>` : ""}
     </li>
   `;
+}
+
+function stepAmount(step) {
+  if (step.kind === "stage") {
+    if (step.cashAmount > 0) return money(step.cashAmount);
+    return step.monthlyRepayment == null ? "" : `${money(step.monthlyRepayment)}/mo`;
+  }
+  if (!(step.amount > 0)) return "";
+  return money(step.amount);
+}
+
+function stepMeta(step) {
+  const soFar = `so far ${money(step.runningCash)}`;
+  if (step.kind === "stage") {
+    const bits = [formatPercent(step.percent)];
+    if (step.cashAmount > 0 && step.bankAmount > 0) bits.push("cash + bank");
+    else if (step.bankAmount > 0) bits.push("bank");
+    if (step.cashAmount > 0 && step.monthlyRepayment != null) bits.push(`${money(step.monthlyRepayment)}/mo`);
+    bits.push(soFar);
+    return bits.join(" · ");
+  }
+  if (!(step.amount > 0) && step.loanDisbursed == null) return "";
+  const bits = [];
+  if (step.loanDisbursed != null) bits.push(`loan ${money(step.loanDisbursed)}`);
+  if (step.monthlyRepayment != null) bits.push(`${money(step.monthlyRepayment)}/mo`);
+  bits.push(soFar);
+  return bits.join(" · ");
+}
+
+function stepNotes(result) {
+  const items = result.paymentTimeline.map((step) => {
+    const copy = stepCopy(result, step);
+    const note = [copy.timing, copy.todo].filter(Boolean).join(" ");
+    if (!note) return "";
+    return `<li><strong>${esc(copy.title)}</strong> ${esc(note)}</li>`;
+  }).join("");
+  if (!items) return "";
+  return `<details class="fold" data-keep="step-notes"><summary>What to do at each step</summary><ul class="notes">${items}</ul></details>`;
 }
 
 function stepCopy(result, step) {
@@ -660,42 +679,15 @@ function stepCopy(result, step) {
   return book[step.id];
 }
 
-function milestoneMoney(step) {
-  const due = step.amount == null ? "No payment" : money(step.amount);
-  const loan = step.loanDisbursed == null
-    ? ""
-    : `<p class="loan-line">Loan released <strong>${esc(money(step.loanDisbursed))}</strong></p>`;
-  const repay = step.monthlyRepayment == null
-    ? ""
-    : `<p class="repay">Monthly repayment starts at <strong>${esc(money(step.monthlyRepayment))}</strong></p>`;
-  return `
-    <p class="kicker">Due</p>
-    <p class="step-amount">${esc(due)}</p>
-    ${loan}
-    ${repay}
-  `;
-}
-
-function stageMoney(step) {
-  const repay = step.monthlyRepayment == null ? "—" : money(step.monthlyRepayment);
-  return `
-    <p class="kicker">Est. monthly repayment</p>
-    <p class="step-amount">${esc(repay)}</p>
-    <dl class="split">
-      <div><dt>Stage</dt><dd>${esc(formatPercent(step.percent))}</dd></div>
-      <div><dt>Cash / CPF</dt><dd>${esc(money(step.cashAmount))}</dd></div>
-      <div><dt>Bank</dt><dd>${esc(money(step.bankAmount))}</dd></div>
-    </dl>
-  `;
-}
-
-function bindStageTable() {
-  const details = timeline.querySelector(".stage-table");
-  if (!details) return;
-  details.open = stageTableOpen;
-  details.addEventListener("toggle", () => {
-    stageTableOpen = details.open;
-  });
+function mountDisclosures(root) {
+  for (const details of root.querySelectorAll("details[data-keep]")) {
+    const key = details.dataset.keep;
+    details.open = openSections.has(key);
+    details.addEventListener("toggle", () => {
+      if (details.open) openSections.add(key);
+      else openSections.delete(key);
+    });
+  }
 }
 
 function stageTable(result) {
@@ -718,7 +710,7 @@ function stageTable(result) {
   const bankShare = result.stages.reduce((sum, stage) => sum + stage.bankPercent, 0);
 
   return `
-    <details class="stage-table">
+    <details class="stage-table" data-keep="stage-table">
       <summary>Full stage table</summary>
       <p class="section-lead">The same stages, with the spreadsheet’s interest and principal columns. Cash and CPF beyond the first 20% go to the earliest stages first. The rest of each stage is what the bank releases. From each stage, the estimate repays principal and interest on the running total the bank has released, over the full tenure. There is no interest-only period during construction. The monthly figure on the timeline is this repayment, rounded to the nearest dollar.</p>
       <p class="hint">Swipe sideways for the bank's monthly interest, principal and repayment.</p>
@@ -761,12 +753,7 @@ function stageTable(result) {
 }
 
 function fact(label, value) {
-  return `
-    <div>
-      <p class="fact-label">${esc(label)}</p>
-      <p class="fact">${esc(value)}</p>
-    </div>
-  `;
+  return `<p class="fact"><span>${esc(label)}</span>${esc(value)}</p>`;
 }
 
 function line(label, amount, why = "", kind = "", display = null) {
