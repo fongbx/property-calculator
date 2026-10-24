@@ -222,6 +222,21 @@ summary:focus-visible,
   outline: none;
 }
 
+.affix input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.affix input[type="number"]::-webkit-outer-spin-button,
+.affix input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.affix input:disabled {
+  color: var(--muted);
+}
+
 .affix .prefix,
 .affix span[aria-hidden="true"] {
   color: var(--muted);
@@ -337,6 +352,105 @@ select {
   margin-top: 0.2rem;
   color: var(--muted);
   font-size: 12px;
+}
+
+.growth {
+  margin: 0;
+}
+
+.growth h3 {
+  margin: 0 0 0.15rem;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.growth-bars {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0.28rem;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.growth-bars li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.growth-amt {
+  margin-bottom: 0.18rem;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.15;
+  text-align: center;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.growth-track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 4.5rem;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.growth-bar {
+  width: 100%;
+  max-width: 2.25rem;
+  margin: 0 auto;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+
+.growth-when {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 0.22rem;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.growth-note {
+  max-width: 42rem;
+}
+
+.growth-table {
+  margin-top: 0.45rem;
+}
+
+.growth-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.growth-table th,
+.growth-table td {
+  padding: 0.32rem 0.35rem;
+  border-bottom: 1px solid var(--line);
+  font-weight: 400;
+  text-align: left;
+}
+
+.growth-table td,
+.growth-table th:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.growth-table th:first-child {
+  text-align: left;
+  font-weight: 500;
 }
 
 .when {
@@ -814,6 +928,12 @@ button.quiet {
   display: none;
 }
 
+.step-repay {
+  grid-column: 2 / -1;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .meta {
   grid-column: 2 / -1;
   color: var(--muted);
@@ -1038,6 +1158,17 @@ tfoot td {
   .figure-monthly { grid-area: monthly; }
   .figure-salary { grid-area: salary; }
   .when { grid-area: when; margin-top: 0.35rem; }
+
+  .figures:has(.growth) {
+    grid-template-areas:
+      "total monthly salary"
+      "growth growth growth"
+      "when when when";
+  }
+
+  .growth {
+    grid-area: growth;
+  }
 
   .figure {
     font-size: 28px;

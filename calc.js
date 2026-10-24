@@ -155,6 +155,21 @@ export function maxTenureYears(iwaa) {
   return Math.min(30, 65 - iwaa);
 }
 
+/**
+ * Years actually used. Blank keeps the bank maximum, including a fraction
+ * such as 28.2. A chosen number cannot go under 5 years, and cannot go
+ * past the maximum. When the maximum itself is under 5, that maximum wins.
+ */
+function resolveTenure(maxYears, requested) {
+  if (!(maxYears > 0) || requested == null) {
+    return { years: maxYears, clamped: false, reason: null };
+  }
+  const floor = Math.min(5, maxYears);
+  if (requested > maxYears) return { years: maxYears, clamped: true, reason: "above-max" };
+  if (requested < floor) return { years: floor, clamped: true, reason: "below-min" };
+  return { years: requested, clamped: false, reason: null };
+}
+
 /** 55% when a 30-year loan would run past age 65, otherwise 75%. */
 export function ltvFromIwaa(iwaa) {
   if (iwaa > 0 && iwaa + 30 > 65) return 0.55;
@@ -310,6 +325,39 @@ function progressiveStages(priceCents, ltv, annualRate, tenureYears, launchDate)
 }
 
 /**
+ * Stages where the bank has actually paid something, and the stage at which
+ * that running total first covers the estimated loan (normally CSC).
+ * Resale pays the whole loan at completion, so it has a start date and no steps.
+ */
+function buildRepaymentGrowth(mode, stages, estimatedLoan, completionDate) {
+  if (mode === "resale") {
+    const from = { id: "completion", label: "Completion", date: completionDate };
+    return { steps: [], fullFrom: from, paymentsStart: completionDate ? from : null };
+  }
+
+  const steps = (stages || [])
+    .filter((stage) => stage.cumulativeBank > 0 && stage.monthlyRepayment > 0)
+    .map((stage) => ({
+      id: stage.id,
+      label: stage.label,
+      date: stage.date,
+      cumulativeBank: stage.cumulativeBank,
+      monthlyRepayment: stage.monthlyRepayment,
+    }));
+
+  const reached = estimatedLoan > 0
+    ? steps.find((stage) => stage.cumulativeBank + 1e-6 >= estimatedLoan)
+    : null;
+  const fullFrom = reached || steps.at(-1) || null;
+
+  return {
+    steps,
+    fullFrom: fullFrom ? { id: fullFrom.id, label: fullFrom.label, date: fullFrom.date } : null,
+    paymentsStart: steps[0] ? { id: steps[0].id, label: steps[0].label, date: steps[0].date } : null,
+  };
+}
+
+/**
  * One home in, one result out.
  * `mode` is "new_launch" or "resale".
  * Rates are decimals: 0.75 means 75%, 0.04 means 4% a year.
@@ -340,6 +388,16 @@ export function calculateProperty(input = {}) {
   const otherMonthlyDebt = finiteOrNull(input.otherMonthlyDebt) ?? 0;
   if (!(otherMonthlyDebt >= 0)) {
     errors.push({ field: "debt", message: "Other monthly debt cannot be negative." });
+  }
+
+  let requestedTenure = null;
+  if (input.tenureYears != null && input.tenureYears !== "") {
+    const asked = typeof input.tenureYears === "number" ? input.tenureYears : Number(input.tenureYears);
+    if (!Number.isFinite(asked)) {
+      errors.push({ field: "tenure", message: "Loan tenure needs to be a number of years, or blank." });
+    } else {
+      requestedTenure = asked;
+    }
   }
 
   const bankerShow = optionalNonNegative(input.bankerShowFunds);
@@ -389,7 +447,9 @@ export function calculateProperty(input = {}) {
   }));
   const totalMonthlySalary = usableBuyers.reduce((sum, buyer) => sum + (buyer.monthlySalary || 0), 0);
   const iwaa = incomeWeightedAverageAge(usableBuyers);
-  const tenure = maxTenureYears(iwaa);
+  const bankMaxTenure = maxTenureYears(iwaa);
+  const resolvedTenure = resolveTenure(bankMaxTenure, requestedTenure);
+  const tenure = resolvedTenure.years;
   const iwaaLtv = ltvFromIwaa(iwaa);
 
   const loanAtEnteredCents = portionCents(priceCents, ltv);
@@ -563,7 +623,10 @@ export function calculateProperty(input = {}) {
     totalMonthlySalary,
     salaryEntered: totalMonthlySalary > 0,
     iwaa,
-    maxTenureYears: tenure,
+    maxTenureYears: bankMaxTenure,
+    tenureYears: tenure,
+    tenureClamped: resolvedTenure.clamped,
+    tenureClampReason: resolvedTenure.reason,
     enteredLtv: ltv,
     iwaaLtv,
     loanAtEnteredLtv: dollars(loanAtEnteredCents),
@@ -574,6 +637,12 @@ export function calculateProperty(input = {}) {
     annualInterestRate,
     otherMonthlyDebt,
     monthlyRepayment: repayment,
+    repaymentGrowth: buildRepaymentGrowth(
+      mode,
+      stages,
+      estimatedLoan,
+      mode === "resale" ? paymentTimeline.find((step) => step.id === "completion")?.date ?? null : null,
+    ),
     minSalaryTdsr,
     minSalaryMsr,
     incomeShortfall,
