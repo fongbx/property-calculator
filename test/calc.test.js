@@ -370,6 +370,86 @@ describe("income tests and show funds", () => {
     assert.equal(result.incomeShortfall, 0);
     assert.equal(result.showFundsUnpledged, 0);
     assert.equal(result.showFundsPledged, 0);
+    assert.equal(result.fundPlan.show.override, null);
+    assert.equal(result.fundPlan.show.amount, 0);
+    assert.equal(result.fundPlan.pledge.amount, 0);
+  });
+
+  it("uses the calculated show funds when the banker's figure is left blank", () => {
+    const result = calculateProperty({ ...example, bankerShowFunds: "", bankerPledgedFunds: null });
+    assert.equal(result.showFundsUnpledged, 1_875_000);
+    assert.equal(result.showFundsPledged, 563_000);
+    assert.equal(result.fundPlan.show.override, null);
+    assert.equal(result.fundPlan.pledge.override, null);
+    assert.equal(result.fundPlan.show.amount, result.showFundsUnpledged);
+    assert.equal(result.fundPlan.pledge.amount, result.showFundsPledged);
+    assert.equal(result.fundPlan.show.calculated, 1_875_000);
+    assert.equal(result.totalCashCpf, 509_600);
+  });
+
+  it("lets a banker's figure replace the one that is shown, and leaves the other calculated", () => {
+    const result = calculateProperty({
+      ...example,
+      bankerShowFunds: 1_200_000,
+      bankerPledgedFunds: 400_000,
+    });
+    assert.equal(result.showFundsUnpledged, 1_875_000);
+    assert.equal(result.showFundsPledged, 563_000);
+    assert.equal(result.fundPlan.show.calculated, 1_875_000);
+    assert.equal(result.fundPlan.show.override, 1_200_000);
+    assert.equal(result.fundPlan.show.amount, 1_200_000);
+    assert.equal(result.fundPlan.pledge.calculated, 563_000);
+    assert.equal(result.fundPlan.pledge.override, 400_000);
+    assert.equal(result.fundPlan.pledge.amount, 400_000);
+    assert.equal(result.totalCashCpf, 509_600);
+    assert.equal(result.cashNeeded.total, 509_600);
+
+    const onlyPledge = calculateProperty({ ...example, bankerPledgedFunds: 250_000 });
+    assert.equal(onlyPledge.fundPlan.show.amount, 1_875_000);
+    assert.equal(onlyPledge.fundPlan.show.override, null);
+    assert.equal(onlyPledge.fundPlan.pledge.amount, 250_000);
+  });
+
+  it("dates proof by exercise, and the first bank payout at foundation for a 75% loan", () => {
+    const result = calculateProperty(example);
+    assert.equal(result.fundPlan.applicationBy, "2026-11-24");
+    assert.equal(result.fundPlan.applicationFrom, "2026-10-31");
+    assert.equal(result.fundPlan.estimatedDisbursementId, "foundation");
+    assert.equal(result.fundPlan.estimatedDisbursement, "2027-04-29");
+    assert.equal(result.fundPlan.disbursement, "2027-04-29");
+    assert.equal(result.fundPlan.disbursementOverridden, false);
+    assert.equal(result.fundPlan.showReadyBy, "2027-04-22");
+    assert.equal(result.fundPlan.pledgeUntil, "2031-04-29");
+  });
+
+  it("moves the first bank payout to the ceiling at 55% LTV", () => {
+    const result = calculateProperty({ ...example, ltv: 0.55 });
+    assert.equal(result.fundPlan.estimatedDisbursementId, "ceiling");
+    assert.equal(result.fundPlan.estimatedDisbursement, "2028-04-29");
+    assert.equal(result.fundPlan.showReadyBy, "2028-04-22");
+    assert.equal(result.fundPlan.pledgeUntil, "2032-04-29");
+  });
+
+  it("uses completion for a resale, a week before for show funds, and four years for the pledge", () => {
+    const result = calculateProperty({ ...example, mode: "resale", otpDate: "2026-10-31" });
+    assert.equal(result.fundPlan.applicationBy, "2026-11-14");
+    assert.equal(result.fundPlan.applicationFrom, "2026-10-31");
+    assert.equal(result.fundPlan.estimatedDisbursementId, "completion");
+    assert.equal(result.fundPlan.disbursement, "2027-01-23");
+    assert.equal(result.fundPlan.showReadyBy, "2027-01-16");
+    assert.equal(result.fundPlan.pledgeUntil, "2031-01-23");
+  });
+
+  it("follows a typed first-payout date for the fund checklist only", () => {
+    const result = calculateProperty({ ...example, disbursementDate: "2027-06-15" });
+    assert.equal(result.fundPlan.estimatedDisbursement, "2027-04-29");
+    assert.equal(result.fundPlan.estimatedDisbursementId, "foundation");
+    assert.equal(result.fundPlan.disbursementOverridden, true);
+    assert.equal(result.fundPlan.disbursement, "2027-06-15");
+    assert.equal(result.fundPlan.showReadyBy, addDays("2027-06-15", -7));
+    assert.equal(result.fundPlan.showReadyBy, "2027-06-08");
+    assert.equal(result.fundPlan.pledgeUntil, "2031-06-15");
+    assert.equal(result.paymentTimeline.find((step) => step.id === "foundation").date, "2027-04-29");
   });
 
   it("rounds show funds up, and leaves an exact thousand alone", () => {

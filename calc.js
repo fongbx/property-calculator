@@ -342,6 +342,24 @@ export function calculateProperty(input = {}) {
     errors.push({ field: "debt", message: "Other monthly debt cannot be negative." });
   }
 
+  const bankerShow = optionalNonNegative(input.bankerShowFunds);
+  const bankerPledge = optionalNonNegative(input.bankerPledgedFunds);
+  if (Number.isNaN(bankerShow)) {
+    errors.push({ field: "banker-show", message: "The banker's show-funds figure needs to be a number, or blank." });
+  }
+  if (Number.isNaN(bankerPledge)) {
+    errors.push({ field: "banker-pledge", message: "The banker's pledged-funds figure needs to be a number, or blank." });
+  }
+
+  let disbursementOverride = null;
+  if (input.disbursementDate != null && input.disbursementDate !== "") {
+    if (!isIsoDate(input.disbursementDate)) {
+      errors.push({ field: "disbursement-date", message: "The first loan payout date is not a real date." });
+    } else {
+      disbursementOverride = input.disbursementDate;
+    }
+  }
+
   const buyers = normalizeBuyers(input.buyers);
   buyers.forEach((buyer, index) => {
     if (buyer.age != null && !(buyer.age >= 0 && buyer.age <= 120)) {
@@ -565,6 +583,17 @@ export function calculateProperty(input = {}) {
     timeline,
     paymentTimeline,
     cashNeeded: buildCashNeeded(paymentTimeline, mode),
+    fundPlan: buildFundPlan({
+      mode,
+      bookingDate,
+      otpDate,
+      steps: paymentTimeline,
+      showCalculated: showFundsUnpledged,
+      pledgeCalculated: showFundsPledged,
+      showOverride: Number.isNaN(bankerShow) ? null : bankerShow,
+      pledgeOverride: Number.isNaN(bankerPledge) ? null : bankerPledge,
+      disbursementOverride,
+    }),
     stages,
     stageCashTotal,
     stageBankTotal,
@@ -647,6 +676,67 @@ function latestDate(steps) {
 function sumCash(steps) {
   const cents = steps.reduce((sum, step) => sum + Math.round((step.cashDue || 0) * 100), 0);
   return cents / 100;
+}
+
+/** Blank stays blank. A negative or non-number is NaN so the caller can reject it. */
+function optionalNonNegative(value) {
+  if (value == null || value === "") return null;
+  const number = finiteOrNull(value);
+  if (!Number.isFinite(number) || number < 0) return Number.NaN;
+  return number;
+}
+
+function fundFigure(calculated, override) {
+  const hasOverride = override != null && !Number.isNaN(override);
+  return {
+    calculated,
+    override: hasOverride ? override : null,
+    amount: hasOverride ? override : calculated,
+  };
+}
+
+/**
+ * Show funds and pledged funds are savings to have ready, not payments.
+ * Dates follow the loan: proof by exercise, then the first time the bank pays out.
+ */
+function buildFundPlan({
+  mode,
+  bookingDate,
+  otpDate,
+  steps,
+  showCalculated,
+  pledgeCalculated,
+  showOverride,
+  pledgeOverride,
+  disbursementOverride,
+}) {
+  const exercise = steps.find((step) => step.id === "exercise");
+  const firstBank = steps.find((step) => (step.bankAmount || 0) > 0 || (step.loanDisbursed || 0) > 0);
+  const estimatedDisbursement = firstBank?.date ?? null;
+  const overridden = isIsoDate(disbursementOverride);
+  const disbursement = overridden ? disbursementOverride : estimatedDisbursement;
+
+  return {
+    mode,
+    show: fundFigure(showCalculated, showOverride),
+    pledge: fundFigure(pledgeCalculated, pledgeOverride),
+    applicationBy: exercise?.date ?? null,
+    applicationFrom: mode === "resale" ? otpDate : bookingDate,
+    estimatedDisbursement,
+    estimatedDisbursementId: firstBank?.id ?? null,
+    estimatedDisbursementLabel: disbursementLabel(firstBank),
+    disbursement,
+    disbursementOverridden: overridden,
+    showReadyBy: disbursement ? addDays(disbursement, -7) : null,
+    pledgeUntil: disbursement ? addMonths(disbursement, 48) : null,
+  };
+}
+
+function disbursementLabel(step) {
+  if (!step) return null;
+  if (step.label) return step.label;
+  if (step.id === "completion") return "Completion";
+  return null;
 }
 
 /** One result per home, in the same order. Used later for a side-by-side view. */

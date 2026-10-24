@@ -489,6 +489,98 @@ select {
   font-weight: 400;
 }
 
+.funds {
+  margin-top: 0.9rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.funds h2 {
+  margin: 0 0 0.25rem;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.funds-lead {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.funds-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.fund h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fund-kind,
+.fund-source,
+.fund-calc,
+.fund-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.fund-kind {
+  margin-top: 0.1rem;
+}
+
+.fund-amount {
+  margin-top: 0.3rem;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.fund-source {
+  margin-top: 0.15rem;
+}
+
+.fund .field {
+  max-width: 16rem;
+  margin-top: 0.55rem;
+}
+
+.fund-calc:empty,
+.fund-steps:empty {
+  display: none;
+}
+
+.fund-calc {
+  margin-top: 0.35rem;
+}
+
+.fund-steps {
+  margin: 0.55rem 0 0;
+  padding: 0 0 0 1.1rem;
+  font-size: 13px;
+}
+
+.fund-steps li {
+  margin: 0.45rem 0 0;
+}
+
+.fund-steps li p + p {
+  margin-top: 0.12rem;
+}
+
+.fund-when {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.field-disbursement {
+  max-width: 18rem;
+  margin-top: 0.85rem;
+}
+
 .note {
   margin-top: 0.75rem;
   padding-top: 0.65rem;
@@ -668,6 +760,15 @@ button.quiet {
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
+}
+
+.step-marker h4 {
+  font-weight: 500;
+}
+
+.step-marker::before {
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 .step-date {
@@ -962,6 +1063,16 @@ tfoot td {
   .step::before {
     left: 0;
     top: -0.55rem;
+  }
+
+  .step-marker {
+    flex-basis: 11rem;
+    width: 11rem;
+  }
+
+  .funds-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
   }
 
   .step-amount {

@@ -101,6 +101,50 @@
 
       <div id="summary"></div>
 
+      <section class="funds" id="funds" hidden aria-labelledby="funds-heading">
+        <h2 id="funds-heading">Show or pledge funds</h2>
+        <p class="funds-lead">Savings you must have and show, or lock in a fixed deposit. This is not cash you pay the developer, and it is not part of the total cash / CPF above.</p>
+        <div class="funds-grid">
+          <article class="fund">
+            <h3>Show funds</h3>
+            <p class="fund-kind">Unpledged. A bank counts these at 30%.</p>
+            <p class="fund-amount" id="show-amount"></p>
+            <p class="fund-source" id="show-source"></p>
+            <div class="field">
+              <label for="banker-show">Banker's figure (S$)</label>
+              <div class="affix">
+                <span class="prefix" aria-hidden="true">S$</span>
+                <input id="banker-show" name="banker-show" inputmode="decimal" spellcheck="false" aria-describedby="banker-show-error">
+              </div>
+              <p class="field-error" id="banker-show-error" hidden></p>
+            </div>
+            <p class="fund-calc" id="show-calc"></p>
+            <ol class="fund-steps" id="show-steps"></ol>
+          </article>
+          <article class="fund">
+            <h3>Pledged funds</h3>
+            <p class="fund-kind">Locked with your lending bank. Counted in full.</p>
+            <p class="fund-amount" id="pledge-amount"></p>
+            <p class="fund-source" id="pledge-source"></p>
+            <div class="field">
+              <label for="banker-pledge">Banker's figure (S$)</label>
+              <div class="affix">
+                <span class="prefix" aria-hidden="true">S$</span>
+                <input id="banker-pledge" name="banker-pledge" inputmode="decimal" spellcheck="false" aria-describedby="banker-pledge-error">
+              </div>
+              <p class="field-error" id="banker-pledge-error" hidden></p>
+            </div>
+            <p class="fund-calc" id="pledge-calc"></p>
+            <ol class="fund-steps" id="pledge-steps"></ol>
+          </article>
+        </div>
+        <div class="field field-disbursement">
+          <label for="disbursement-date">First loan payout, if you were given a date</label>
+          <input id="disbursement-date" name="disbursement-date" type="date" aria-describedby="disbursement-hint">
+          <p class="hint" id="disbursement-hint"></p>
+        </div>
+      </section>
+
       <details class="more">
         <summary>More details</summary>
         <div class="more-body">
@@ -247,7 +291,7 @@
           </div>
           <div>
             <dt>Show funds</dt>
-            <dd>If income is short of the TDSR salary, a bank may ask to see savings. Unpledged money is only counted at 30%, so the sum is the gap times 48 months, divided by 0.3. Pledged money is locked for 48 months and counted in full: the gap times 48. Both are rounded up to the next S$1,000. With no salary entered, the whole minimum salary is the gap.</dd>
+            <dd>Savings a bank may ask to see when income is short of the TDSR salary. They are not part of the cash paid to the developer. Unpledged money is only counted at 30%, so the sum is the gap times 48 months, divided by 0.3. Pledged money is locked for 48 months and counted in full: the gap times 48. Both are rounded up to the next S$1,000. With no salary entered, the whole minimum salary is the gap. A banker's figure, if you type one, is used instead. Proof is shown by the exercise date. Show funds are then ready at the law firm a week before the first loan payout. Pledged funds go into a fixed deposit with the lending bank before that payout, and stay there for at least 4 years.</dd>
           </div>
           <div>
             <dt>Option fee</dt>

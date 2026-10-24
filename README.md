@@ -69,7 +69,10 @@ A later side-by-side view can call `calculateProperty()` once per home, or use `
 - Otherwise the longest tenure is the lesser of 30 years and 65 minus IWAA. If IWAA + 30 is over 65, the age-based limit drops to 55%.
 - **Estimated loan** is the lower of “price × the LTV you typed” and “price × the age-based limit”. The monthly repayment uses that loan.
 - **TDSR** minimum salary = (repayment + other monthly debt) / 0.55. **MSR** = repayment / 0.3, and it ignores other debt. MSR is only there for comparison (it is the HDB / executive condo test).
-- **Show funds**: the income gap is how far the salaries you typed sit below the TDSR minimum. With no salary, the whole minimum counts as the gap. Unpledged = gap × 48 / 0.3. Pledged = gap × 48. Both round **up** to the next S$1,000.
+- **Show funds**: the income gap is how far the salaries you typed sit below the TDSR minimum. With no salary, the whole minimum counts as the gap. Unpledged = gap × 48 / 0.3. Pledged = gap × 48. Both round **up** to the next S$1,000. These are savings you have to show or lock up. They are not added to the total cash / CPF.
+- A **banker's figure**, if you type one beside show funds or pledged funds, replaces that calculated amount on the page and on the timeline. The calculated amount stays underneath in small type. Leave the box blank and the calculation is used. The figure is remembered in this browser with the other inputs.
+- Proof of either sum is shown during the loan application, by the exercise date. The bank's letter of offer is signed before you exercise. Show funds are then ready at the law firm at least a week before the first loan payout. Pledged funds go into a fixed deposit with your lending bank before that payout, and stay there for at least 4 years.
+- The first payout is the first stage the bank actually pays. At 75% that is foundation. At a lower loan-to-value it can be a later stage, such as the ceiling. On a resale it is completion. A date you type replaces that estimate for the fund checklist only.
 - The total cash / CPF follows the LTV you typed, same as the spreadsheet. If the age rule lends less, that shortfall is shown separately and is not folded into the total.
 
 ## Resale assumptions
