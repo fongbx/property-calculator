@@ -502,20 +502,46 @@ select {
 }
 
 .funds-lead {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.65rem;
   color: var(--muted);
   font-size: 12px;
 }
 
-.funds-grid {
-  display: grid;
-  gap: 0.85rem;
+.funds-quiet {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
 }
 
-.fund h3 {
-  margin: 0;
+.funds-open {
+  margin: 0 0 0 0.35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-ink);
+  font: inherit;
   font-size: 13px;
-  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.fund-choice {
+  height: auto;
+  max-width: 28rem;
+}
+
+.fund-choice .segment-option span {
+  height: auto;
+  min-height: 28px;
+  padding: 0.35rem 0.45rem;
+  line-height: 1.25;
+  text-align: center;
+}
+
+#funds-body .field {
+  max-width: 16rem;
+  margin-top: 0.55rem;
 }
 
 .fund-kind,
@@ -527,7 +553,7 @@ select {
 }
 
 .fund-kind {
-  margin-top: 0.1rem;
+  margin-top: 0.65rem;
 }
 
 .fund-amount {
@@ -541,11 +567,6 @@ select {
 
 .fund-source {
   margin-top: 0.15rem;
-}
-
-.fund .field {
-  max-width: 16rem;
-  margin-top: 0.55rem;
 }
 
 .fund-calc:empty,
@@ -1068,11 +1089,6 @@ tfoot td {
   .step-marker {
     flex-basis: 11rem;
     width: 11rem;
-  }
-
-  .funds-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 1.25rem;
   }
 
   .step-amount {

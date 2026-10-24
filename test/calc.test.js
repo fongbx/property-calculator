@@ -373,6 +373,54 @@ describe("income tests and show funds", () => {
     assert.equal(result.fundPlan.show.override, null);
     assert.equal(result.fundPlan.show.amount, 0);
     assert.equal(result.fundPlan.pledge.amount, 0);
+    assert.equal(result.fundPlan.notNeeded, true);
+    assert.equal(result.fundPlan.notice, "No show or pledge funds needed: your income covers the loan");
+    assert.deepEqual(result.fundPlan.markers, []);
+  });
+
+  it("uses pledge funds unless show funds is chosen", () => {
+    const pledge = calculateProperty(example);
+    assert.equal(pledge.fundPlan.choice, "pledge");
+    assert.equal(pledge.fundPlan.active.amount, 563_000);
+    assert.equal(pledge.fundPlan.notNeeded, false);
+    assert.deepEqual(pledge.fundPlan.markers.map((marker) => [marker.id, marker.title, marker.date, marker.whenPrefix]), [
+      ["fund-application", "Loan application: proof of funds", "2026-11-24", "By"],
+      ["fund-before-payout", "Before first loan payout: funds ready / pledge in fixed deposit", "2027-04-29", "Before"],
+    ]);
+
+    const show = calculateProperty({ ...example, fundChoice: "show" });
+    assert.equal(show.fundPlan.choice, "show");
+    assert.equal(show.fundPlan.active.amount, 1_875_000);
+    assert.equal(show.fundPlan.active, show.fundPlan.show);
+    assert.equal(show.fundPlan.markers[1].date, "2027-04-22");
+    assert.equal(show.fundPlan.markers[1].whenPrefix, "Have ready by");
+    assert.equal(show.fundPlan.markers[0].title, "Loan application: proof of funds");
+  });
+
+  it("keeps a banker's figure on the option that was not chosen", () => {
+    const result = calculateProperty({
+      ...example,
+      fundChoice: "pledge",
+      bankerShowFunds: 1_200_000,
+    });
+    assert.equal(result.fundPlan.active.amount, 563_000);
+    assert.equal(result.fundPlan.show.amount, 1_200_000);
+    assert.equal(result.fundPlan.show.override, 1_200_000);
+  });
+
+  it("opens again when income covers the loan but a banker's figure is entered", () => {
+    const result = calculateProperty({
+      ...example,
+      buyers: [{ age: 30, monthlySalary: 20_000 }],
+      fundChoice: "pledge",
+      bankerPledgedFunds: 50_000,
+    });
+    assert.equal(result.incomeShortfall, 0);
+    assert.equal(result.fundPlan.notNeeded, false);
+    assert.equal(result.fundPlan.notice, null);
+    assert.equal(result.fundPlan.active.amount, 50_000);
+    assert.equal(result.fundPlan.active.calculated, 0);
+    assert.equal(result.fundPlan.markers.length, 2);
   });
 
   it("uses the calculated show funds when the banker's figure is left blank", () => {

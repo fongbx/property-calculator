@@ -33,6 +33,7 @@ const DEFAULTS = {
   bankerShow: "",
   bankerPledge: "",
   disbursementDate: "",
+  fundChoice: "pledge",
 };
 
 const form = document.querySelector("#planner");
@@ -45,6 +46,9 @@ const tenureOut = document.querySelector("#tenure-out");
 
 /** Which disclosures stay open when the figures are redrawn. */
 const openSections = new Set();
+
+/** Keeps the fund card open after "Add banker's figure anyway", until reload. */
+let fundsForcedOpen = false;
 
 const PHASES = {
   "within-8-weeks": {
@@ -140,8 +144,15 @@ function init() {
   form.addEventListener("submit", (event) => event.preventDefault());
   document.querySelector("#restore").addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);
+    fundsForcedOpen = false;
     applyState(DEFAULTS);
     draw();
+  });
+  document.querySelector("#funds-open").addEventListener("click", () => {
+    fundsForcedOpen = true;
+    draw();
+    const choice = form.elements["fund-choice"].value === "show" ? "banker-show" : "banker-pledge";
+    document.getElementById(choice).focus();
   });
   for (const id of ["price", "debt", "salary-1", "salary-2", "salary-3", "salary-4", "banker-show", "banker-pledge"]) {
     document.getElementById(id).addEventListener("blur", () => {
@@ -188,6 +199,7 @@ function applyState(state) {
   form.elements["banker-show"].value = state.bankerShow ?? "";
   form.elements["banker-pledge"].value = state.bankerPledge ?? "";
   form.elements["disbursement-date"].value = state.disbursementDate ?? "";
+  form.elements["fund-choice"].value = state.fundChoice === "show" ? "show" : "pledge";
   state.ages.forEach((age, index) => {
     form.elements[`age-${index + 1}`].value = age ?? "";
   });
@@ -214,6 +226,7 @@ function collectState() {
     bankerShow: form.elements["banker-show"].value,
     bankerPledge: form.elements["banker-pledge"].value,
     disbursementDate: form.elements["disbursement-date"].value,
+    fundChoice: form.elements["fund-choice"].value === "show" ? "show" : "pledge",
   };
 }
 
@@ -247,6 +260,7 @@ function normalizeState(state) {
     bankerShow: state.bankerShow.trim(),
     bankerPledge: state.bankerPledge.trim(),
     disbursementDate: state.disbursementDate,
+    fundChoice: state.fundChoice === "show" ? "show" : "pledge",
   };
 }
 
@@ -349,6 +363,7 @@ function interpret(state) {
       bankerShowFunds: bankerShow,
       bankerPledgedFunds: bankerPledge,
       disbursementDate: state.disbursementDate || null,
+      fundChoice: state.fundChoice,
     },
   };
 }
@@ -641,7 +656,7 @@ function loanSection(result) {
 function incomeSection(result) {
   return `
     <section>
-      <p class="section-lead">TDSR is the test banks apply to private homes. MSR is shown beside it because HDB and executive condos use 30%.</p>
+      <p class="section-lead">${esc(incomeLead(result))}</p>
       ${line("Monthly repayment", result.monthlyRepayment, "Rounded to the nearest dollar here. The exact amount is in the loan section.", "", result.monthlyRepayment == null ? "—" : money(result.monthlyRepayment))}
       ${line("Other monthly debt", result.otherMonthlyDebt)}
       ${line("Minimum salary at 55% TDSR", result.minSalaryTdsr, "Repayment plus other debt, divided by 0.55. Rounded to the nearest dollar.")}
@@ -694,32 +709,20 @@ function phaseBlock(result, group) {
 
 function withFundMarkers(result) {
   const steps = result.paymentTimeline.map((step) => ({ ...step }));
-  const plan = result.fundPlan;
-  if (!plan || !((plan.show.amount || 0) > 0 || (plan.pledge.amount || 0) > 0)) return steps;
+  const markers = result.fundPlan?.markers || [];
+  if (markers.length === 0) return steps;
 
   const inserts = [];
-  const exerciseIndex = steps.findIndex((step) => step.id === "exercise");
-  if (exerciseIndex >= 0) {
+  const byId = {
+    "fund-application": steps.findIndex((step) => step.id === "exercise"),
+    "fund-before-payout": steps.findIndex((step) => step.id === result.fundPlan.estimatedDisbursementId),
+  };
+  for (const marker of markers) {
+    const index = byId[marker.id];
+    if (index == null || index < 0) continue;
     inserts.push({
-      index: exerciseIndex,
-      marker: {
-        id: "fund-application",
-        kind: "marker",
-        phase: steps[exerciseIndex].phase,
-        date: plan.applicationBy,
-      },
-    });
-  }
-  const payoutIndex = steps.findIndex((step) => step.id === plan.estimatedDisbursementId);
-  if (payoutIndex >= 0) {
-    inserts.push({
-      index: payoutIndex,
-      marker: {
-        id: "fund-before-payout",
-        kind: "marker",
-        phase: steps[payoutIndex].phase,
-        date: plan.showReadyBy || plan.disbursement,
-      },
+      index,
+      marker: { ...marker, kind: "marker", phase: steps[index].phase },
     });
   }
   inserts.sort((a, b) => b.index - a.index);
@@ -747,22 +750,19 @@ function stepCard(result, step) {
 
 function markerCard(result, step) {
   const plan = result.fundPlan;
-  const title = step.id === "fund-application"
-    ? "Loan application: show proof of funds"
-    : "Before first loan payout: show funds ready / pledge in fixed deposit";
-  const when = step.date ? `By ${formatDate(step.date)}` : "Add the date";
-  const amounts = [];
-  if (plan.show.amount > 0) amounts.push(`Show ${money(plan.show.amount)}`);
-  if (plan.pledge.amount > 0) amounts.push(`Pledge ${money(plan.pledge.amount)}`);
-  const note = step.id === "fund-application"
-    ? "Not a payment. The letter of offer is signed before you exercise."
-    : "Not a payment. Have the money ready, or in a fixed deposit, before the bank pays out.";
+  const when = step.date ? `${step.whenPrefix || "By"} ${formatDate(step.date)}` : "Add the date";
+  const bits = ["Not a payment"];
+  if (plan.active.amount > 0) {
+    const label = plan.choice === "show" ? "Show" : "Pledge";
+    bits.unshift(`${label} ${money(plan.active.amount)}`);
+  }
+  if (step.id === "fund-application") bits.push("The letter of offer is signed before you exercise.");
   return `
     <li class="step step-marker">
       <p class="step-date">${esc(when)}</p>
-      <h4>${esc(title)}</h4>
+      <h4>${esc(step.title)}</h4>
       <p class="step-amount"></p>
-      <p class="meta">${esc([...amounts, note].join(" · "))}</p>
+      <p class="meta">${esc(bits.join(" · "))}</p>
     </li>
   `;
 }
@@ -896,29 +896,37 @@ function stageTable(result) {
   `;
 }
 
+function incomeLead(result) {
+  const plan = result.fundPlan;
+  const which = plan.choice === "show" ? "show funds" : "pledge funds";
+  const using = plan.notNeeded
+    ? "Income covers the loan, so no show or pledge funds are asked for."
+    : `Show funds and pledge funds are alternatives. The card is using ${which}.`;
+  return `TDSR is the test banks apply to private homes. MSR is shown beside it because HDB and executive condos use 30%. ${using}`;
+}
+
 function renderFunds(result) {
   const card = document.getElementById("funds");
   const plan = result.fundPlan;
+  const collapsed = plan.notNeeded && !fundsForcedOpen;
   card.hidden = false;
-  paintFund("show", plan.show, "income shortfall × 48 ÷ 0.3");
-  paintFund("pledge", plan.pledge, "income shortfall × 48");
-  document.getElementById("show-steps").innerHTML = plan.show.amount > 0 ? showChecklist(plan) : "";
-  document.getElementById("pledge-steps").innerHTML = plan.pledge.amount > 0 ? pledgeChecklist(plan) : "";
-  document.getElementById("disbursement-hint").textContent = disbursementHint(plan);
-}
+  document.getElementById("funds-quiet").hidden = !collapsed;
+  document.getElementById("funds-body").hidden = collapsed;
+  document.getElementById("funds-notice").textContent = plan.notice || "";
+  if (collapsed) return;
 
-function paintFund(key, fund, formula) {
-  const amount = document.getElementById(`${key}-amount`);
-  const source = document.getElementById(`${key}-source`);
-  const calc = document.getElementById(`${key}-calc`);
-  amount.textContent = fund.amount == null ? "—" : money(fund.amount);
+  const fund = plan.active;
+  const formula = plan.choice === "show" ? "income shortfall × 48 ÷ 0.3" : "income shortfall × 48";
+  document.getElementById("fund-kind").textContent = plan.choice === "show"
+    ? "Unpledged. A bank counts these at 30%."
+    : "Locked with your lending bank. Counted in full.";
+  document.getElementById("fund-amount").textContent = fund.amount == null ? "—" : money(fund.amount);
+  const source = document.getElementById("fund-source");
+  const calc = document.getElementById("fund-calc");
   if (fund.override != null) {
     source.textContent = "Banker's figure";
     const calculated = fund.calculated == null ? "—" : money(fund.calculated);
     calc.textContent = `Calculated: ${calculated} (${formula})`;
-  } else if (fund.calculated === 0) {
-    source.textContent = "Not needed based on the salaries entered.";
-    calc.textContent = "";
   } else if (fund.calculated == null) {
     source.textContent = "No repayment to test against.";
     calc.textContent = "";
@@ -926,6 +934,10 @@ function paintFund(key, fund, formula) {
     source.textContent = "Calculated";
     calc.textContent = "";
   }
+  document.getElementById("banker-show-field").hidden = plan.choice !== "show";
+  document.getElementById("banker-pledge-field").hidden = plan.choice !== "pledge";
+  document.getElementById("fund-steps").innerHTML = plan.choice === "show" ? showChecklist(plan) : pledgeChecklist(plan);
+  document.getElementById("disbursement-hint").textContent = disbursementHint(plan);
 }
 
 function showChecklist(plan) {

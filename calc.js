@@ -588,6 +588,8 @@ export function calculateProperty(input = {}) {
       bookingDate,
       otpDate,
       steps: paymentTimeline,
+      fundChoice: input.fundChoice,
+      incomeShortfall,
       showCalculated: showFundsUnpledged,
       pledgeCalculated: showFundsPledged,
       showOverride: Number.isNaN(bankerShow) ? null : bankerShow,
@@ -704,6 +706,8 @@ function buildFundPlan({
   bookingDate,
   otpDate,
   steps,
+  fundChoice,
+  incomeShortfall,
   showCalculated,
   pledgeCalculated,
   showOverride,
@@ -715,20 +719,46 @@ function buildFundPlan({
   const estimatedDisbursement = firstBank?.date ?? null;
   const overridden = isIsoDate(disbursementOverride);
   const disbursement = overridden ? disbursementOverride : estimatedDisbursement;
+  const showReadyBy = disbursement ? addDays(disbursement, -7) : null;
+  const pledgeUntil = disbursement ? addMonths(disbursement, 48) : null;
+  const choice = fundChoice === "show" ? "show" : "pledge";
+  const show = fundFigure(showCalculated, showOverride);
+  const pledge = fundFigure(pledgeCalculated, pledgeOverride);
+  const active = choice === "show" ? show : pledge;
+  const notNeeded = incomeShortfall === 0 && active.override == null;
+  const applicationBy = exercise?.date ?? null;
 
   return {
     mode,
-    show: fundFigure(showCalculated, showOverride),
-    pledge: fundFigure(pledgeCalculated, pledgeOverride),
-    applicationBy: exercise?.date ?? null,
+    choice,
+    show,
+    pledge,
+    active,
+    notNeeded,
+    notice: notNeeded ? "No show or pledge funds needed: your income covers the loan" : null,
+    applicationBy,
     applicationFrom: mode === "resale" ? otpDate : bookingDate,
     estimatedDisbursement,
     estimatedDisbursementId: firstBank?.id ?? null,
     estimatedDisbursementLabel: disbursementLabel(firstBank),
     disbursement,
     disbursementOverridden: overridden,
-    showReadyBy: disbursement ? addDays(disbursement, -7) : null,
-    pledgeUntil: disbursement ? addMonths(disbursement, 48) : null,
+    showReadyBy,
+    pledgeUntil,
+    markers: notNeeded ? [] : [
+      {
+        id: "fund-application",
+        title: "Loan application: proof of funds",
+        date: applicationBy,
+        whenPrefix: "By",
+      },
+      {
+        id: "fund-before-payout",
+        title: "Before first loan payout: funds ready / pledge in fixed deposit",
+        date: choice === "show" ? showReadyBy : disbursement,
+        whenPrefix: choice === "show" ? "Have ready by" : "Before",
+      },
+    ],
   };
 }
 
