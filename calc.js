@@ -156,18 +156,19 @@ export function maxTenureYears(iwaa) {
 }
 
 /**
- * Years actually used. Blank keeps the bank maximum, including a fraction
- * such as 28.2. A chosen number cannot go under 5 years, and cannot go
- * past the maximum. When the maximum itself is under 5, that maximum wins.
+ * Years actually used. Blank, zero, or anything that is not a number above 0
+ * keeps the bank maximum, including a fraction such as 28.2. A number above 0
+ * is used as typed, even when it is longer than that maximum. aboveMax is
+ * only a flag for the page's quiet note; it does not change the years used.
  */
 function resolveTenure(maxYears, requested) {
-  if (!(maxYears > 0) || requested == null) {
-    return { years: maxYears, clamped: false, reason: null };
+  if (requested == null || !Number.isFinite(requested) || !(requested > 0)) {
+    return { years: maxYears, aboveMax: false };
   }
-  const floor = Math.min(5, maxYears);
-  if (requested > maxYears) return { years: maxYears, clamped: true, reason: "above-max" };
-  if (requested < floor) return { years: floor, clamped: true, reason: "below-min" };
-  return { years: requested, clamped: false, reason: null };
+  return {
+    years: requested,
+    aboveMax: Number.isFinite(maxYears) && maxYears > 0 && requested > maxYears,
+  };
 }
 
 /** 55% when a 30-year loan would run past age 65, otherwise 75%. */
@@ -392,12 +393,8 @@ export function calculateProperty(input = {}) {
 
   let requestedTenure = null;
   if (input.tenureYears != null && input.tenureYears !== "") {
-    const asked = typeof input.tenureYears === "number" ? input.tenureYears : Number(input.tenureYears);
-    if (!Number.isFinite(asked)) {
-      errors.push({ field: "tenure", message: "Loan tenure needs to be a number of years, or blank." });
-    } else {
-      requestedTenure = asked;
-    }
+    const asked = typeof input.tenureYears === "number" ? input.tenureYears : Number(String(input.tenureYears).trim());
+    if (Number.isFinite(asked) && asked > 0) requestedTenure = asked;
   }
 
   const bankerShow = optionalNonNegative(input.bankerShowFunds);
@@ -625,8 +622,7 @@ export function calculateProperty(input = {}) {
     iwaa,
     maxTenureYears: bankMaxTenure,
     tenureYears: tenure,
-    tenureClamped: resolvedTenure.clamped,
-    tenureClampReason: resolvedTenure.reason,
+    tenureAboveMax: resolvedTenure.aboveMax,
     enteredLtv: ltv,
     iwaaLtv,
     loanAtEnteredLtv: dollars(loanAtEnteredCents),

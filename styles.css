@@ -604,41 +604,14 @@ select {
   font-weight: 400;
 }
 
-.funds {
-  margin-top: 0.9rem;
-  padding-top: 0.85rem;
-  border-top: 1px solid var(--line);
-}
-
-.funds h2 {
-  margin: 0 0 0.25rem;
-  font-size: 13px;
-  font-weight: 600;
+.funds > summary {
+  white-space: nowrap;
 }
 
 .funds-lead {
-  margin: 0 0 0.65rem;
+  margin: 0.15rem 0 0.65rem;
   color: var(--muted);
   font-size: 12px;
-}
-
-.funds-quiet {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.funds-open {
-  margin: 0 0 0 0.35rem;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent-ink);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
 }
 
 .fund-choice {
@@ -730,8 +703,10 @@ select {
 }
 
 .more,
-.fold {
+.fold,
+.stage-table {
   margin-top: 0.35rem;
+  margin-bottom: 0;
 }
 
 .more > summary,
@@ -839,9 +814,12 @@ button.quiet {
   text-underline-offset: 0.15em;
 }
 
-#timeline,
-#detail {
+#timeline {
   margin-top: 1.25rem;
+}
+
+#detail {
+  margin-top: 0;
 }
 
 .pay-timeline h2 {
@@ -1016,10 +994,6 @@ button.quiet {
   font-size: 14px;
 }
 
-.stage-table {
-  margin-top: 0.75rem;
-}
-
 .stage-table .section-lead,
 .stage-table .hint {
   margin-top: 0.35rem;
@@ -1091,7 +1065,7 @@ tfoot td {
 }
 
 .closing {
-  margin-top: 1.5rem;
+  margin-top: 0.35rem;
 }
 
 .disclaimer h2 {
@@ -1104,10 +1078,6 @@ tfoot td {
 .glossary dd {
   color: var(--muted);
   font-size: 13px;
-}
-
-.glossary {
-  margin-top: 0.75rem;
 }
 
 .glossary dl {
