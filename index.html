@@ -95,10 +95,10 @@
         <div class="field field-tenure">
           <label for="tenure">Loan tenure</label>
           <div class="affix">
-            <input id="tenure" name="tenure" type="number" inputmode="decimal" min="5" max="30" step="any" value="30" spellcheck="false" aria-describedby="tenure-hint tenure-note tenure-error">
+            <input id="tenure" name="tenure" type="number" inputmode="decimal" step="any" value="30" spellcheck="false" aria-describedby="tenure-hint tenure-note">
             <span aria-hidden="true">yrs</span>
           </div>
-          <p class="hint" id="tenure-hint">Max 30 years.</p>
+          <p class="hint" id="tenure-hint">Bank's max for your ages: 30 years.</p>
           <p class="hint" id="tenure-note" hidden></p>
           <p class="field-error" id="tenure-error" hidden></p>
         </div>
@@ -129,15 +129,11 @@
 
       <div id="summary"></div>
 
-      <section class="funds" id="funds" hidden aria-labelledby="funds-heading">
-        <p class="funds-quiet" id="funds-quiet" hidden>
-          <span id="funds-notice"></span>
-          <button type="button" class="funds-open" id="funds-open">Add banker's figure anyway</button>
-        </p>
-        <div id="funds-body">
-          <h2 id="funds-heading">Show or pledge funds</h2>
+      <details class="fold funds" id="funds" hidden>
+        <summary id="funds-heading"><span id="funds-summary">Pledge funds needed</span></summary>
+        <div class="fold-body" id="funds-body">
           <p class="funds-lead">One or the other. Savings you must have and show, or lock in a fixed deposit. This is not cash you pay the developer, and it is not part of the total cash / CPF above.</p>
-          <div class="segment fund-choice" role="radiogroup" aria-labelledby="funds-heading">
+          <div class="segment fund-choice" role="radiogroup" aria-label="Show funds or pledge funds">
             <label class="segment-option">
               <input type="radio" name="fund-choice" value="show">
               <span>Show funds (unpledged)</span>
@@ -174,14 +170,14 @@
             <p class="hint" id="disbursement-hint"></p>
           </div>
         </div>
-      </section>
+      </details>
 
       <details class="more">
         <summary>More details</summary>
         <div class="more-body">
           <fieldset class="buyers">
             <legend>Buyers</legend>
-            <p class="hint">Up to four people. A row counts when it has a monthly salary. The weighted age sets the longest tenure you can choose above.</p>
+            <p class="hint">Up to four people. A row counts when it has a monthly salary. The weighted age sets the bank's usual maximum, shown beside loan tenure.</p>
             <div class="buyer">
               <p class="buyer-name">Buyer 1</p>
               <div class="field">
@@ -289,7 +285,7 @@
           </div>
           <div>
             <dt>IWAA — Income-weighted average age</dt>
-            <dd>The buyers' ages averaged by salary, so a higher earner counts more. That age sets the longest tenure you can choose: the lesser of 30 years and 65 minus the age. You can pick fewer years, down to 5, and not past that maximum. If that age plus 30 years would pass 65, the spreadsheet cuts the loan limit from 75% to 55%. The 75% or 55% cut follows the age, not the years you pick. With no salary entered, the longest tenure is 30 years and the limit stays 75%.</dd>
+            <dd>The buyers' ages averaged by salary, so a higher earner counts more. That age sets the bank's usual maximum: the lesser of 30 years and 65 minus the age. The page starts on that maximum. Any number of years above 0 can be typed, including more than the maximum. The repayment uses the years typed, and a short note appears when they are longer than usual. If that age plus 30 years would pass 65, the spreadsheet cuts the loan limit from 75% to 55%. The 75% or 55% cut follows the age, not the years typed. With no salary entered, the usual maximum is 30 years and the limit stays 75%.</dd>
           </div>
           <div>
             <dt>TDSR — Total Debt Servicing Ratio</dt>

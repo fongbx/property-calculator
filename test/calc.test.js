@@ -349,11 +349,11 @@ describe("a chosen loan tenure", () => {
     const result = calculateProperty(example);
     assert.equal(result.tenureYears, 30);
     assert.equal(result.maxTenureYears, 30);
-    assert.equal(result.tenureClamped, false);
-    assert.equal(result.tenureClampReason, null);
+    assert.equal(result.tenureAboveMax, false);
     assert.equal(Math.round(result.monthlyRepayment), 6_445);
     assert.equal(Math.round(result.minSalaryTdsr), 11_718);
     assert.equal(calculateProperty({ ...example, tenureYears: "" }).tenureYears, 30);
+    assert.equal(calculateProperty({ ...example, tenureYears: null }).tenureYears, 30);
   });
 
   it("raises the repayment and the minimum salary on a shorter tenure", () => {
@@ -361,7 +361,7 @@ describe("a chosen loan tenure", () => {
     const shorter = calculateProperty({ ...example, tenureYears: 25 });
     assert.equal(shorter.tenureYears, 25);
     assert.equal(shorter.maxTenureYears, 30);
-    assert.equal(shorter.tenureClamped, false);
+    assert.equal(shorter.tenureAboveMax, false);
     assert.ok(shorter.monthlyRepayment > full.monthlyRepayment);
     assert.ok(shorter.minSalaryTdsr > full.minSalaryTdsr);
     assert.ok(shorter.minSalaryMsr > full.minSalaryMsr);
@@ -374,41 +374,53 @@ describe("a chosen loan tenure", () => {
     assert.equal(shorter.totalCashCpf, 509_600);
   });
 
-  it("clamps a tenure above the maximum", () => {
-    const result = calculateProperty({ ...example, tenureYears: 40 });
-    assert.equal(result.tenureYears, 30);
-    assert.equal(result.maxTenureYears, 30);
-    assert.equal(result.tenureClamped, true);
-    assert.equal(result.tenureClampReason, "above-max");
-    assert.equal(Math.round(result.monthlyRepayment), 6_445);
+  it("uses a tenure above the maximum as entered", () => {
+    const full = calculateProperty(example);
+    const longer = calculateProperty({ ...example, tenureYears: 40 });
+    assert.equal(longer.ok, true);
+    assert.equal(longer.tenureYears, 40);
+    assert.equal(longer.maxTenureYears, 30);
+    assert.equal(longer.tenureAboveMax, true);
+    assert.ok(longer.monthlyRepayment < full.monthlyRepayment);
+    assert.notEqual(Math.round(longer.monthlyRepayment), 6_445);
+    assert.equal(longer.estimatedLoan, 1_350_000);
+    assert.equal(longer.iwaaLtv, 0.75);
+    assert.equal(longer.totalCashCpf, 509_600);
+    assert.equal(calculateProperty({ ...example, tenureYears: "40" }).tenureYears, 40);
   });
 
-  it("clamps a tenure below 5 years", () => {
+  it("uses a tenure under 5 years as entered", () => {
+    const full = calculateProperty(example);
     const result = calculateProperty({ ...example, tenureYears: 2 });
-    assert.equal(result.tenureYears, 5);
-    assert.equal(result.tenureClamped, true);
-    assert.equal(result.tenureClampReason, "below-min");
+    assert.equal(result.tenureYears, 2);
+    assert.equal(result.tenureAboveMax, false);
     assert.equal(result.maxTenureYears, 30);
+    assert.ok(result.monthlyRepayment > full.monthlyRepayment);
+    assert.equal(result.estimatedLoan, full.estimatedLoan);
+    assert.equal(result.totalCashCpf, full.totalCashCpf);
   });
 
-  it("clamps to a lower maximum when ages change, and leaves the 55% rule on age", () => {
+  it("keeps a tenure above a lower age-based maximum, and leaves the 55% rule on age", () => {
     const buyers = [{ age: 40, monthlySalary: 10_000 }];
+    const atMax = calculateProperty({ ...example, buyers });
     const over = calculateProperty({ ...example, buyers, tenureYears: 30 });
+    assert.equal(atMax.tenureYears, 25);
     assert.equal(over.maxTenureYears, 25);
-    assert.equal(over.tenureYears, 25);
-    assert.equal(over.tenureClamped, true);
-    assert.equal(over.tenureClampReason, "above-max");
+    assert.equal(over.tenureYears, 30);
+    assert.equal(over.tenureAboveMax, true);
     assert.equal(over.iwaaLtv, 0.55);
+    assert.ok(over.monthlyRepayment < atMax.monthlyRepayment);
+    assert.equal(over.estimatedLoan, atMax.estimatedLoan);
 
     const kept = calculateProperty({ ...example, buyers, tenureYears: 20 });
     assert.equal(kept.tenureYears, 20);
-    assert.equal(kept.tenureClamped, false);
-    assert.equal(kept.tenureClampReason, null);
+    assert.equal(kept.tenureAboveMax, false);
+    assert.equal(kept.tenureClampReason, undefined);
     assert.equal(kept.iwaaLtv, 0.55);
     assert.ok(kept.monthlyRepayment > over.monthlyRepayment);
   });
 
-  it("keeps a fractional maximum when tenure is left out, and clamps a longer request to it", () => {
+  it("keeps a fractional maximum when tenure is left out, and uses a longer request as entered", () => {
     const buyers = [
       { age: 32, monthlySalary: 8_000 },
       { age: 40, monthlySalary: 12_000 },
@@ -416,20 +428,39 @@ describe("a chosen loan tenure", () => {
     const untouched = calculateProperty({ ...example, buyers });
     assert.ok(Math.abs(untouched.maxTenureYears - 28.2) < 1e-9);
     assert.ok(Math.abs(untouched.tenureYears - 28.2) < 1e-9);
-    assert.equal(untouched.tenureClamped, false);
+    assert.equal(untouched.tenureAboveMax, false);
     assert.ok(Math.abs(untouched.monthlyRepayment - 4883.7353449944585) < 1e-6);
 
     const over = calculateProperty({ ...example, buyers, tenureYears: 29 });
-    assert.ok(Math.abs(over.tenureYears - 28.2) < 1e-9);
-    assert.equal(over.tenureClamped, true);
-    assert.equal(over.tenureClampReason, "above-max");
+    assert.equal(over.tenureYears, 29);
+    assert.equal(over.tenureAboveMax, true);
+    assert.ok(Math.abs(over.maxTenureYears - 28.2) < 1e-9);
+    assert.ok(over.monthlyRepayment < untouched.monthlyRepayment);
     assert.equal(over.iwaaLtv, 0.55);
   });
 
-  it("rejects a tenure that is not a number", () => {
-    const result = calculateProperty({ ...example, tenureYears: "nope" });
-    assert.equal(result.ok, false);
-    assert.ok(result.errors.some((error) => error.field === "tenure"));
+  it("falls back to the maximum when tenure is blank or not a positive number", () => {
+    for (const tenureYears of ["nope", 0, -3, "0", "  "]) {
+      const result = calculateProperty({ ...example, tenureYears });
+      assert.equal(result.ok, true, String(tenureYears));
+      assert.equal(result.tenureYears, 30);
+      assert.equal(result.tenureAboveMax, false);
+      assert.equal(result.errors.length, 0);
+    }
+  });
+
+  it("still calculates when a tenure is typed past an age that has no bank maximum", () => {
+    const buyers = [{ age: 66, monthlySalary: 8_000 }];
+    const blank = calculateProperty({ ...example, buyers });
+    assert.ok(blank.maxTenureYears < 0);
+    assert.equal(blank.monthlyRepayment, null);
+
+    const typed = calculateProperty({ ...example, buyers, tenureYears: 10 });
+    assert.equal(typed.tenureYears, 10);
+    assert.equal(typed.tenureAboveMax, false);
+    assert.equal(typed.iwaaLtv, 0.55);
+    assert.ok(typed.monthlyRepayment > 0);
+    assert.equal(typed.warnings.some((warning) => warning.code === "tenure-unavailable"), false);
   });
 });
 
