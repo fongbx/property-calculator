@@ -102,6 +102,29 @@
           <p class="hint" id="tenure-note" hidden></p>
           <p class="field-error" id="tenure-error" hidden></p>
         </div>
+
+        <div class="key-dates">
+          <div id="new-launch-dates" class="date-row">
+            <div class="field field-date">
+              <label for="booking-date">Booking date</label>
+              <input id="booking-date" name="bookingDate" type="date" value="2026-10-31" aria-describedby="booking-hint">
+              <p class="hint" id="booking-hint">The 5% option fee is paid this day. The early dates are counted from here.</p>
+            </div>
+            <div class="field field-date">
+              <label for="launch-date">Launch date</label>
+              <input id="launch-date" name="launchDate" type="date" value="2026-10-31" aria-describedby="launch-hint">
+              <p class="hint" id="launch-hint">Foundation is estimated 180 days after the project's launch.</p>
+            </div>
+          </div>
+
+          <div id="resale-dates" class="date-row" hidden>
+            <div class="field field-date">
+              <label for="otp-date">OTP date</label>
+              <input id="otp-date" name="otpDate" type="date" value="2026-10-31" aria-describedby="otp-hint">
+              <p class="hint" id="otp-hint">The 1% option fee is paid this day. Exercise, stamp duty and completion are counted from here.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="summary"></div>
@@ -156,27 +179,6 @@
       <details class="more">
         <summary>More details</summary>
         <div class="more-body">
-          <div id="new-launch-dates" class="date-row">
-            <div class="field">
-              <label for="booking-date">Booking date</label>
-              <input id="booking-date" name="bookingDate" type="date" aria-describedby="booking-hint">
-              <p class="hint" id="booking-hint">The 5% option fee is paid this day. The early dates are counted from here.</p>
-            </div>
-            <div class="field">
-              <label for="launch-date">Launch date</label>
-              <input id="launch-date" name="launchDate" type="date" aria-describedby="launch-hint">
-              <p class="hint" id="launch-hint">Foundation is estimated 180 days after the project's launch.</p>
-            </div>
-          </div>
-
-          <div id="resale-dates" class="date-row" hidden>
-            <div class="field">
-              <label for="otp-date">OTP date</label>
-              <input id="otp-date" name="otpDate" type="date" aria-describedby="otp-hint">
-              <p class="hint" id="otp-hint">The 1% option fee is paid this day. Exercise, stamp duty and completion are counted from here.</p>
-            </div>
-          </div>
-
           <fieldset class="buyers">
             <legend>Buyers</legend>
             <p class="hint">Up to four people. A row counts when it has a monthly salary. The weighted age sets the longest tenure you can choose above.</p>
