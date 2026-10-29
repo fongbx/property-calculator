@@ -36,6 +36,8 @@ const DEFAULTS = {
   fundChoice: "pledge",
   tenureYears: "",
   fundsOpen: false,
+  foundationDate: "",
+  stageDates: {},
 };
 
 const form = document.querySelector("#planner");
@@ -50,6 +52,10 @@ const tenureNote = document.querySelector("#tenure-note");
 
 /** Blank tenure means "use the current maximum", so a later age can still move it. */
 let tenureFollowsMax = true;
+/** Blank foundation date means "launch plus 180 days", so a later launch still moves it. */
+let foundationFollowsEstimate = true;
+/** Later-stage dates the buyer set. Foundation itself lives in foundationDate. */
+let stageDates = {};
 
 /** Which disclosures stay open when the figures are redrawn. */
 const openSections = new Set();
@@ -151,6 +157,13 @@ function init() {
     applyState(DEFAULTS);
     draw();
   });
+  document.getElementById("foundation-reset").addEventListener("click", () => {
+    foundationFollowsEstimate = true;
+    document.getElementById("foundation-date").value = "";
+    onEdit();
+  });
+  timeline.addEventListener("click", onTimelineClick);
+  timeline.addEventListener("change", onTimelineChange);
   document.getElementById("funds").addEventListener("toggle", () => {
     persist(collectState());
   });
@@ -180,6 +193,10 @@ function onEdit(event) {
   if (event?.target?.id === "tenure") {
     tenureFollowsMax = event.target.value.trim() === "";
   }
+  if (event?.target?.id === "foundation-date") {
+    const estimate = event.target.dataset.estimate || "";
+    foundationFollowsEstimate = event.target.value === "" || event.target.value === estimate;
+  }
   persist(collectState());
   draw();
 }
@@ -193,6 +210,7 @@ function loadState() {
       ...saved,
       ages: Array.isArray(saved.ages) ? saved.ages.slice(0, 4) : DEFAULTS.ages,
       salaries: Array.isArray(saved.salaries) ? saved.salaries.slice(0, 4) : DEFAULTS.salaries,
+      stageDates: normalizeStageDates(saved.stageDates),
     };
   } catch {
     return structuredClone(DEFAULTS);
@@ -217,6 +235,9 @@ function applyState(state) {
   tenureFollowsMax = String(state.tenureYears ?? "").trim() === "";
   tenureInput.value = tenureFollowsMax ? "" : state.tenureYears;
   document.getElementById("funds").open = Boolean(state.fundsOpen);
+  foundationFollowsEstimate = String(state.foundationDate ?? "").trim() === "";
+  document.getElementById("foundation-date").value = foundationFollowsEstimate ? "" : state.foundationDate;
+  stageDates = normalizeStageDates(state.stageDates);
   state.ages.forEach((age, index) => {
     form.elements[`age-${index + 1}`].value = age ?? "";
   });
@@ -246,7 +267,18 @@ function collectState() {
     fundChoice: form.elements["fund-choice"].value === "show" ? "show" : "pledge",
     tenureYears: tenureFollowsMax ? "" : tenureInput.value,
     fundsOpen: document.getElementById("funds").open,
+    foundationDate: foundationFollowsEstimate ? "" : document.getElementById("foundation-date").value,
+    stageDates: { ...stageDates },
   };
+}
+
+function normalizeStageDates(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const dates = {};
+  for (const [key, date] of Object.entries(value)) {
+    if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) dates[key] = date;
+  }
+  return dates;
 }
 
 function persist(state) {
@@ -281,6 +313,8 @@ function normalizeState(state) {
     disbursementDate: state.disbursementDate,
     fundChoice: state.fundChoice === "show" ? "show" : "pledge",
     tenureYears: String(state.tenureYears ?? "").trim(),
+    foundationDate: String(state.foundationDate ?? ""),
+    stageDates: normalizeStageDates(state.stageDates),
   };
 }
 
@@ -288,8 +322,8 @@ function draw() {
   const state = collectState();
   syncVisibility(state);
   status.textContent = sameAsExample(state)
-    ? "Spreadsheet example. Figures update as you type."
-    : "Figures update as you type and stay in this browser.";
+    ? "Example figures. They update as you type."
+    : "Saved in this browser. They update as you type.";
 
   const { input, problems } = interpret(state);
   showFieldErrors(problems);
@@ -305,6 +339,7 @@ function draw() {
     return;
   }
   syncTenure(result);
+  syncFoundation(result);
   summary.innerHTML = renderSummary(result);
   renderFunds(result);
   timeline.innerHTML = renderPaymentTimeline(result);
@@ -315,13 +350,15 @@ function draw() {
   live.textContent = [
     `Total cash and CPF ${money(result.totalCashCpf)}.`,
     `Full monthly repayment ${result.monthlyRepayment == null ? "not available" : money(result.monthlyRepayment)}.`,
-    `Minimum salary ${result.minSalaryTdsr == null ? "not available" : money(result.minSalaryTdsr)}.`,
+    `Total loan ${result.estimatedLoan == null ? "not available" : money(result.estimatedLoan)}.`,
   ].join(" ");
 }
 
 function syncVisibility(state) {
-  document.getElementById("new-launch-dates").hidden = state.mode !== "new_launch";
-  document.getElementById("resale-dates").hidden = state.mode !== "resale";
+  const launch = state.mode === "new_launch";
+  document.getElementById("new-launch-dates").hidden = !launch;
+  document.getElementById("date-help").hidden = !launch;
+  document.getElementById("resale-dates").hidden = launch;
   document.getElementById("absd-custom-wrap").hidden = state.absd !== "other";
 }
 
@@ -388,6 +425,8 @@ function interpret(state) {
       disbursementDate: state.disbursementDate || null,
       fundChoice: state.fundChoice,
       tenureYears,
+      foundationDate: foundationFollowsEstimate ? null : (state.foundationDate || null),
+      stageDates: state.stageDates,
     },
   };
 }
@@ -520,43 +559,60 @@ function renderProblems(problems) {
   live.textContent = problems[0].message;
 }
 
+function syncFoundation(result) {
+  const input = document.getElementById("foundation-date");
+  const reset = document.getElementById("foundation-reset");
+  const tag = document.getElementById("foundation-estimate-tag");
+  if (!input || result.mode !== "new_launch") {
+    if (reset) reset.hidden = true;
+    return;
+  }
+  input.dataset.estimate = result.foundationDateEstimated || "";
+  if (foundationFollowsEstimate && document.activeElement !== input && result.foundationDate) {
+    input.value = result.foundationDate;
+  }
+  const overridden = Boolean(result.foundationDateOverridden);
+  if (reset) reset.hidden = !overridden;
+  if (tag) tag.hidden = overridden;
+}
+
 function renderSummary(result) {
   const monthly = result.monthlyRepayment == null ? "—" : money(result.monthlyRepayment);
-  const salary = result.minSalaryTdsr == null ? "—" : money(result.minSalaryTdsr);
-  const tenureLine = result.tenureYears > 0
-    ? `${tenureCaption(result.tenureYears)} at ${formatRate(result.annualInterestRate)}`
-    : "No usable tenure";
-  const fromLine = fullRepaymentWhen(result);
+  const loan = result.estimatedLoan == null ? "—" : money(result.estimatedLoan);
+  const starts = startsLine(result);
+  const loanNote = result.warnings.some((warning) => warning.code === "iwaa-shortfall")
+    ? `Age limit ${formatPercent(result.iwaaLtv)}`
+    : "";
 
   return `
     <section class="results" aria-label="Main figures">
       <div class="figures">
-        <article class="figure-total">
+        <article>
           <h2>Total cash / CPF</h2>
           <p class="figure">${esc(money(result.totalCashCpf))}</p>
-          <p class="figure-note">Not all of this is due at booking.</p>
+          <p class="figure-note">Not all due at booking.</p>
         </article>
-        ${whenNeeded(result)}
-        <article class="figure-monthly">
+        <article>
+          <h2>Total loan</h2>
+          <p class="figure">${esc(loan)}</p>
+          <p class="figure-note">${esc(loanNote)}</p>
+        </article>
+        <article>
           <h2>Full monthly repayment</h2>
           <p class="figure">${esc(monthly)}</p>
-          <p class="figure-note">${esc(tenureLine)}</p>
-          ${fromLine ? `<p class="figure-note">${esc(fromLine)}</p>` : ""}
+          <p class="figure-note">${esc(starts)}</p>
         </article>
-        ${growthChart(result)}
-        <article class="figure-salary">
-          <h2>Minimum salary (55% TDSR)</h2>
-          <p class="figure">${esc(salary)}</p>
-          <p class="figure-note">Combined gross monthly</p>
-        </article>
-      </div>
-      <div class="facts" aria-label="More of the main figures">
-        ${fact("Loan", result.estimatedLoan == null ? "—" : money(result.estimatedLoan))}
-        ${fact("Stamp duty", money(result.totalStampDuty))}
       </div>
     </section>
     ${summaryNotes(result)}
   `;
+}
+
+function startsLine(result) {
+  if (!(result.monthlyRepayment > 0)) return "";
+  const from = result.repaymentGrowth?.fullFrom;
+  if (!from?.date) return "";
+  return `Starts about ${formatMonthYear(from.date)}`;
 }
 
 function fullRepaymentWhen(result) {
@@ -604,28 +660,22 @@ function growthChart(result) {
 
   return `
     <figure class="growth">
-      <figcaption>
-        <h3>How your payment grows</h3>
-        ${startNote}
-      </figcaption>
+      ${startNote}
       <ol class="growth-bars">${bars}</ol>
-      <p class="hint growth-note">Estimates: full payments (loan + interest) on the amount paid out so far. Some banks charge interest only during construction, which would make early months lower.</p>
-      <details class="growth-table" data-keep="growth-table">
-        <summary>Amounts by stage</summary>
-        <div class="table-scroll" tabindex="0">
-          <table>
-            <caption class="sr-only">Monthly payment after each stage the bank has paid.</caption>
-            <thead>
-              <tr>
-                <th scope="col">From</th>
-                <th scope="col">Bank has paid</th>
-                <th scope="col">Monthly payment</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      </details>
+      <p class="hint growth-note">Full payments (loan and interest) on the amount the bank has paid out so far. Some banks charge interest only during construction, which would make the early months lower.</p>
+      <div class="table-scroll" tabindex="0">
+        <table>
+          <caption class="sr-only">Monthly payment after each stage the bank has paid.</caption>
+          <thead>
+            <tr>
+              <th scope="col">From</th>
+              <th scope="col">Bank has paid</th>
+              <th scope="col">Monthly payment</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     </figure>
   `;
 }
@@ -712,11 +762,25 @@ function summaryNotes(result) {
 }
 
 function renderDetail(result) {
+  const growth = growthChart(result) || `<p class="section-lead">${esc(startsLine(result) || "The full repayment is shown above.")}</p>`;
   return [
-    fold("cash", "How the total cash / CPF is built", cashSection(result)),
+    fold("growth", "How your monthly payment grows", growth),
+    fold("salary", "Salary needed", salarySection(result)),
     fold("loan", "The loan, age and LTV", loanSection(result)),
-    fold("income", "Salary and show funds", incomeSection(result)),
   ].join("");
+}
+
+function salarySection(result) {
+  return `
+    <section>
+      <p class="section-lead">What a bank compares with the full repayment. This is not cash you pay for the home.</p>
+      ${line("Minimum salary at 55% TDSR", result.minSalaryTdsr, "Repayment plus other debt, divided by 0.55.")}
+      ${line("Minimum salary at 30% MSR", result.minSalaryMsr, "Repayment divided by 0.3. Other debt is not included.")}
+      <p class="hint msr-note">MSR (30% of income) usually applies to HDB/EC, not private condos.</p>
+      ${line("Salary entered", result.totalMonthlySalary, "The monthly salaries you typed, added up.")}
+      ${line("Income shortfall", result.incomeShortfall, "How far the entered salary is below the 55% figure. Zero when income already covers the loan.")}
+    </section>
+  `;
 }
 
 function fold(key, title, body) {
@@ -801,18 +865,150 @@ function incomeSection(result) {
 }
 
 function renderPaymentTimeline(result) {
-  const groups = groupPhases(withFundMarkers(result));
-  const phases = groups.map((group) => phaseBlock(result, group)).join("");
-  const table = result.mode === "new_launch" ? stageTable(result) : "";
-
+  const rows = withFundMarkers(result);
+  const anyStageOverride = rows.some((step) => step.kind === "stage" && step.id !== "foundation" && step.dateOverridden);
+  const resetAll = anyStageOverride
+    ? `<button type="button" class="text-button" id="reset-stages">Reset stage dates</button>`
+    : "";
   return `
-    <section class="pay-timeline" aria-labelledby="timeline-heading">
-      <h2 id="timeline-heading">Payment timeline</h2>
-      ${phases}
-      ${stepNotes(result)}
-      ${table}
+    <section class="schedule-wrap" aria-labelledby="timeline-heading">
+      <div class="schedule-head">
+        <h2 id="timeline-heading">Payment timeline</h2>
+        ${resetAll}
+      </div>
+      <p class="hint schedule-lead">In date order. Tap a stage date to change it. Later stages keep their usual gap after that date.</p>
+      <ol class="schedule">${rows.map((step) => scheduleRow(result, step)).join("")}</ol>
     </section>
   `;
+}
+
+function scheduleRow(result, step) {
+  if (step.kind === "marker") return markerRow(result, step);
+  const copy = stepCopy(result, step);
+  const title = copy?.title || step.label || step.id;
+  const repay = step.monthlyRepayment > 0
+    ? `<p class="sched-repay">${esc(money(step.monthlyRepayment))} a month</p>`
+    : "";
+  const foundation = step.id === "foundation" ? " sched-foundation" : "";
+  return `
+    <li class="sched-row${foundation}">
+      ${dateCell(step)}
+      <p class="sched-name">${esc(title)}</p>
+      <p class="sched-amt">${esc(rowAmount(step))}</p>
+      <p class="sched-meta">${esc(payLine(step))}</p>
+      ${repay}
+      <p class="sched-run">Cash so far ${esc(money(step.runningCash || 0))}</p>
+    </li>
+  `;
+}
+
+function markerRow(result, step) {
+  const plan = result.fundPlan;
+  const when = step.date ? formatDate(step.date) : "Add the date";
+  const which = plan.choice === "show" ? "Show" : "Pledge";
+  const amt = plan.active.amount > 0 ? `${which} ${money(plan.active.amount)}` : "Not a payment";
+  return `
+    <li class="sched-row sched-marker">
+      <div class="sched-date"><time>${esc(when)}</time></div>
+      <p class="sched-name">${esc(step.title)}</p>
+      <p class="sched-amt"></p>
+      <p class="sched-meta">${esc(amt)}. Not cash you pay for the home.</p>
+    </li>
+  `;
+}
+
+function dateCell(step) {
+  if (step.kind === "stage" && step.date) {
+    const reset = step.dateOverridden
+      ? `<button type="button" class="text-button" data-reset-stage="${esc(step.id)}">Reset</button>`
+      : "";
+    return `
+      <div class="sched-date">
+        <button type="button" class="date-tap" data-edit-stage="${esc(step.id)}" data-iso="${esc(step.date)}" data-estimate="${esc(step.dateEstimated || "")}">${esc(formatDate(step.date))}</button>
+        ${reset}
+      </div>
+    `;
+  }
+  const text = step.date ? formatDate(step.date) : "Add the date";
+  return `<div class="sched-date"><time>${esc(text)}</time></div>`;
+}
+
+function rowAmount(step) {
+  if (step.kind === "stage") {
+    if (step.cashAmount > 0) return money(step.cashAmount);
+    if (step.bankAmount > 0) return money(step.bankAmount);
+    return "";
+  }
+  if (step.cashDue > 0) return money(step.cashDue);
+  return "";
+}
+
+function payLine(step) {
+  if (step.kind === "stage") {
+    const bits = [];
+    if (step.cashAmount > 0) bits.push(`Cash / CPF ${money(step.cashAmount)}`);
+    if (step.bankAmount > 0) bits.push(`Bank ${money(step.bankAmount)}`);
+    return bits.join(" · ") || "No payment this stage";
+  }
+  if (step.loanDisbursed > 0) {
+    const cash = step.cashDue > 0 ? `Cash / CPF ${money(step.cashDue)} · ` : "";
+    return `${cash}Bank loan ${money(step.loanDisbursed)}`;
+  }
+  if (step.cashDue > 0) return "Cash / CPF";
+  return "No payment this day";
+}
+
+function onTimelineClick(event) {
+  const resetAll = event.target.closest("#reset-stages");
+  if (resetAll) {
+    stageDates = {};
+    onEdit();
+    return;
+  }
+  const reset = event.target.closest("[data-reset-stage]");
+  if (reset) {
+    commitStageDate(reset.dataset.resetStage, "", "");
+    return;
+  }
+  const button = event.target.closest("[data-edit-stage]");
+  if (!button || button.dataset.editing === "1") return;
+  const input = document.createElement("input");
+  input.type = "date";
+  input.className = "date-pop";
+  input.value = button.dataset.iso || "";
+  input.dataset.editStage = button.dataset.editStage;
+  input.dataset.estimate = button.dataset.estimate || "";
+  button.replaceWith(input);
+  input.addEventListener("blur", () => {
+    if (input.isConnected) onEdit();
+  });
+  input.focus();
+}
+
+function onTimelineChange(event) {
+  const input = event.target.closest("input[data-edit-stage]");
+  if (!input) return;
+  event.stopPropagation();
+  commitStageDate(input.dataset.editStage, input.value, input.dataset.estimate || "");
+}
+
+function commitStageDate(id, value, estimate) {
+  if (id === "foundation") {
+    const field = document.getElementById("foundation-date");
+    if (!value || value === estimate) {
+      foundationFollowsEstimate = true;
+      field.value = "";
+    } else {
+      foundationFollowsEstimate = false;
+      field.value = value;
+      field.dataset.estimate = estimate;
+    }
+  } else if (!value || value === estimate) {
+    delete stageDates[id];
+  } else {
+    stageDates[id] = value;
+  }
+  onEdit();
 }
 
 function groupPhases(steps) {
