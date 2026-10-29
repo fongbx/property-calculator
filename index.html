@@ -38,7 +38,7 @@
           <p class="hint sr-only" id="mode-hint">A new launch is paid in stages. A resale or completed home is paid on a short timetable.</p>
         </div>
 
-        <div class="field">
+        <div class="field field-price">
           <label for="price">Price</label>
           <div class="affix">
             <span class="prefix" aria-hidden="true">S$</span>
@@ -107,15 +107,19 @@
           <div id="new-launch-dates" class="date-row">
             <div class="field field-date">
               <label for="booking-date">Booking date</label>
-              <input id="booking-date" name="bookingDate" type="date" value="2026-10-31" aria-describedby="booking-hint">
-              <p class="hint" id="booking-hint">The 5% option fee is paid this day. The early dates are counted from here.</p>
+              <input id="booking-date" name="bookingDate" type="date" value="2026-10-31">
             </div>
             <div class="field field-date">
               <label for="launch-date">Launch date</label>
-              <input id="launch-date" name="launchDate" type="date" value="2026-10-31" aria-describedby="launch-hint">
-              <p class="hint" id="launch-hint">Foundation is estimated 180 days after the project's launch.</p>
+              <input id="launch-date" name="launchDate" type="date" value="2026-10-31">
+            </div>
+            <div class="field field-date field-foundation">
+              <label for="foundation-date">Foundation date <span class="estimate-tag" id="foundation-estimate-tag">Estimate</span></label>
+              <input id="foundation-date" name="foundationDate" type="date" value="2027-04-29" aria-describedby="date-help">
+              <button type="button" class="text-button" id="foundation-reset" hidden>Reset to estimate</button>
             </div>
           </div>
+          <p class="hint date-help" id="date-help">Launch date = when sales opened. Booking date = when you pay the option fee. Foundation date = when the bank first pays out part of your loan.</p>
 
           <div id="resale-dates" class="date-row" hidden>
             <div class="field field-date">
@@ -126,51 +130,6 @@
           </div>
         </div>
       </div>
-
-      <div id="summary"></div>
-
-      <details class="fold funds" id="funds" hidden>
-        <summary id="funds-heading"><span id="funds-summary">Pledge funds needed</span></summary>
-        <div class="fold-body" id="funds-body">
-          <p class="funds-lead">One or the other. Savings you must have and show, or lock in a fixed deposit. This is not cash you pay the developer, and it is not part of the total cash / CPF above.</p>
-          <div class="segment fund-choice" role="radiogroup" aria-label="Show funds or pledge funds">
-            <label class="segment-option">
-              <input type="radio" name="fund-choice" value="show">
-              <span>Show funds (unpledged)</span>
-            </label>
-            <label class="segment-option">
-              <input type="radio" name="fund-choice" value="pledge" checked>
-              <span>Pledge funds</span>
-            </label>
-          </div>
-          <p class="fund-kind" id="fund-kind"></p>
-          <p class="fund-amount" id="fund-amount"></p>
-          <p class="fund-source" id="fund-source"></p>
-          <div class="field" id="banker-show-field">
-            <label for="banker-show">Banker's figure (S$)</label>
-            <div class="affix">
-              <span class="prefix" aria-hidden="true">S$</span>
-              <input id="banker-show" name="banker-show" inputmode="decimal" spellcheck="false" aria-describedby="banker-show-error">
-            </div>
-            <p class="field-error" id="banker-show-error" hidden></p>
-          </div>
-          <div class="field" id="banker-pledge-field">
-            <label for="banker-pledge">Banker's figure (S$)</label>
-            <div class="affix">
-              <span class="prefix" aria-hidden="true">S$</span>
-              <input id="banker-pledge" name="banker-pledge" inputmode="decimal" spellcheck="false" aria-describedby="banker-pledge-error">
-            </div>
-            <p class="field-error" id="banker-pledge-error" hidden></p>
-          </div>
-          <p class="fund-calc" id="fund-calc"></p>
-          <ol class="fund-steps" id="fund-steps"></ol>
-          <div class="field field-disbursement">
-            <label for="disbursement-date">First loan payout, if you were given a date</label>
-            <input id="disbursement-date" name="disbursement-date" type="date" aria-describedby="disbursement-hint">
-            <p class="hint" id="disbursement-hint"></p>
-          </div>
-        </div>
-      </details>
 
       <details class="more">
         <summary>More details</summary>
@@ -254,21 +213,61 @@
             <p class="field-error" id="debt-error" hidden></p>
           </div>
 
-          <button type="button" class="quiet" id="restore">Restore the spreadsheet example</button>
+          <button type="button" class="quiet" id="restore">Restore the example</button>
         </div>
       </details>
+
+      <div id="summary"></div>
+      <div id="timeline"></div>
+
+      <details class="fold funds" id="funds" hidden>
+        <summary id="funds-heading"><span id="funds-summary">Pledge funds needed</span></summary>
+        <div class="fold-body" id="funds-body">
+          <p class="funds-lead">One or the other. Savings you must have and show, or lock in a fixed deposit. This is not cash you pay the developer, and it is not part of the total cash / CPF above.</p>
+          <div class="segment fund-choice" role="radiogroup" aria-label="Show funds or pledge funds">
+            <label class="segment-option">
+              <input type="radio" name="fund-choice" value="show">
+              <span>Show funds (unpledged)</span>
+            </label>
+            <label class="segment-option">
+              <input type="radio" name="fund-choice" value="pledge" checked>
+              <span>Pledge funds</span>
+            </label>
+          </div>
+          <p class="fund-kind" id="fund-kind"></p>
+          <p class="fund-amount" id="fund-amount"></p>
+          <p class="fund-source" id="fund-source"></p>
+          <div class="field" id="banker-show-field">
+            <label for="banker-show">Banker's figure (S$)</label>
+            <div class="affix">
+              <span class="prefix" aria-hidden="true">S$</span>
+              <input id="banker-show" name="banker-show" inputmode="decimal" spellcheck="false" aria-describedby="banker-show-error">
+            </div>
+            <p class="field-error" id="banker-show-error" hidden></p>
+          </div>
+          <div class="field" id="banker-pledge-field">
+            <label for="banker-pledge">Banker's figure (S$)</label>
+            <div class="affix">
+              <span class="prefix" aria-hidden="true">S$</span>
+              <input id="banker-pledge" name="banker-pledge" inputmode="decimal" spellcheck="false" aria-describedby="banker-pledge-error">
+            </div>
+            <p class="field-error" id="banker-pledge-error" hidden></p>
+          </div>
+          <p class="fund-calc" id="fund-calc"></p>
+          <ol class="fund-steps" id="fund-steps"></ol>
+          <div class="field field-disbursement">
+            <label for="disbursement-date">First loan payout, if you were given a date</label>
+            <input id="disbursement-date" name="disbursement-date" type="date" aria-describedby="disbursement-hint">
+            <p class="hint" id="disbursement-hint"></p>
+          </div>
+        </div>
+      </details>
+
     </form>
 
-    <div id="timeline"></div>
     <div id="detail"></div>
 
-    <footer class="closing">
-      <section class="disclaimer" role="note">
-        <h2>Estimates only</h2>
-        <p>Payments, dates and salary figures are estimates. Construction, a bank's letter of offer, the lawyer's completion date and IRAS can all differ. Cash and CPF are not split. This is not advice.</p>
-      </section>
-
-      <details class="fold glossary">
+    <details class="fold glossary">
         <summary>What the words mean</summary>
         <dl>
           <div>
@@ -305,10 +304,16 @@
           </div>
           <div>
             <dt>TOP and CSC</dt>
-            <dd>Temporary Occupation Permit is when you can move into a new project. CSC is the legal completion certificate. In the stage table they are the last two calls for payment.</dd>
+            <dd>Temporary Occupation Permit is when you can move into a new project. CSC is the legal completion certificate. On the timeline they are the last two calls for payment.</dd>
           </div>
         </dl>
       </details>
+
+    <footer class="closing">
+      <section class="disclaimer" role="note">
+        <h2>Estimates only</h2>
+        <p>Payments, dates and salary figures are estimates. Construction, a bank's letter of offer, the lawyer's completion date and IRAS can all differ. Cash and CPF are not split. This is not advice.</p>
+      </section>
     </footer>
   </div>
   <script type="module" src="app.js"></script>

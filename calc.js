@@ -287,11 +287,12 @@ function invalid(errors) {
   return { ok: false, errors, warnings: [] };
 }
 
-function progressiveStages(priceCents, ltv, annualRate, tenureYears, launchDate) {
+function progressiveStages(priceCents, ltv, annualRate, tenureYears, anchorDate, stageOverrides) {
   const cashBeyond = Math.max(0, FULL - rateMillionths(ltv) - rateMillionths(NEW_LAUNCH_TERMS.firstCashTrancheRate));
   let previousPercent = 0;
   let cumulativeBankCents = 0;
-  let date = isIsoDate(launchDate) ? addDays(launchDate, NEW_LAUNCH_TERMS.foundationDaysFromLaunch) : null;
+  let previousActual = isIsoDate(anchorDate) ? anchorDate : null;
+  const overrides = stageOverrides && typeof stageOverrides === "object" ? stageOverrides : {};
 
   return PROGRESSIVE_STAGES.map((stage, index) => {
     const stageScale = rateMillionths(stage.percent);
@@ -300,7 +301,12 @@ function progressiveStages(priceCents, ltv, annualRate, tenureYears, launchDate)
     const cashCents = Math.round(priceCents * cashScale / FULL);
     const bankCents = Math.round(priceCents * bankScale / FULL);
     cumulativeBankCents += bankCents;
-    if (index > 0 && date) date = addMonths(date, stage.monthsAfterPrevious);
+    const estimated = index === 0
+      ? previousActual
+      : (previousActual ? addMonths(previousActual, stage.monthsAfterPrevious) : null);
+    const requested = index > 0 && isIsoDate(overrides[stage.id]) ? overrides[stage.id] : null;
+    const date = requested || estimated;
+    previousActual = date;
     previousPercent += stageScale;
 
     const cumulativeBank = dollars(cumulativeBankCents);
@@ -314,6 +320,8 @@ function progressiveStages(priceCents, ltv, annualRate, tenureYears, launchDate)
       percent: stage.percent,
       monthsAfterPrevious: stage.monthsAfterPrevious,
       date,
+      dateEstimated: estimated,
+      dateOverridden: requested != null,
       cashAmount: dollars(cashCents),
       bankPercent: bankScale / FULL,
       bankAmount: dollars(bankCents),
@@ -488,6 +496,9 @@ export function calculateProperty(input = {}) {
   let newLaunch = null;
   let resale = null;
   let totalCashCents;
+  let foundationDate = null;
+  let foundationDateEstimated = null;
+  let foundationDateOverridden = false;
 
   if (mode === "new_launch") {
     const optionCents = portionCents(priceCents, NEW_LAUNCH_TERMS.optionFeeRate);
@@ -500,7 +511,22 @@ export function calculateProperty(input = {}) {
     const stampCents = priceToCents(totalStampDuty);
     totalCashCents = optionCents + furtherCents + stampCents + foundationCents + additionalCents;
 
-    stages = progressiveStages(priceCents, ltv, annualInterestRate, tenure, launchDate);
+    foundationDateEstimated = launchDate
+      ? addDays(launchDate, NEW_LAUNCH_TERMS.foundationDaysFromLaunch)
+      : null;
+    const foundationRequest = isIsoDate(input.foundationDate) ? input.foundationDate : null;
+    foundationDate = foundationRequest || foundationDateEstimated;
+    foundationDateOverridden = foundationRequest != null
+      && foundationRequest !== foundationDateEstimated;
+
+    stages = progressiveStages(
+      priceCents,
+      ltv,
+      annualInterestRate,
+      tenure,
+      foundationDate,
+      input.stageDates,
+    );
     const stageCashCents = stages.reduce((sum, stage) => sum + priceToCents(stage.cashAmount), 0);
     const stageBankCents = stages.reduce((sum, stage) => sum + priceToCents(stage.bankAmount), 0);
     stageCashTotal = dollars(stageCashCents);
@@ -525,7 +551,10 @@ export function calculateProperty(input = {}) {
     const receiveDate = bookingDate ? addDays(bookingDate, NEW_LAUNCH_TERMS.daysToReceiveSaleAndPurchase) : null;
     const stampDate = exerciseDate ? addDays(exerciseDate, NEW_LAUNCH_TERMS.stampDutyDaysAfterExercise) : null;
     const pay15Date = bookingDate ? addDays(bookingDate, NEW_LAUNCH_TERMS.daysFromBookingToFurtherPayment) : null;
-    const foundationDate = launchDate ? addDays(launchDate, NEW_LAUNCH_TERMS.foundationDaysFromLaunch) : null;
+    if (stages[0]) {
+      stages[0].dateOverridden = foundationDateOverridden;
+      stages[0].dateEstimated = foundationDateEstimated;
+    }
 
     timeline = [
       { id: "option", date: bookingDate, amount: dollars(optionCents) },
@@ -554,6 +583,8 @@ export function calculateProperty(input = {}) {
         percent: stage.percent,
         label: stage.label,
         monthlyRepayment: stage.monthlyRepayment,
+        dateEstimated: stage.dateEstimated,
+        dateOverridden: stage.dateOverridden,
         windowLabel: null,
       })),
     ]);
@@ -644,6 +675,9 @@ export function calculateProperty(input = {}) {
     incomeShortfall,
     showFundsUnpledged,
     showFundsPledged,
+    foundationDate,
+    foundationDateEstimated,
+    foundationDateOverridden,
     totalCashCpf: dollars(totalCashCents),
     timeline,
     paymentTimeline,

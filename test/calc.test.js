@@ -225,6 +225,72 @@ describe("the spreadsheet example", () => {
   });
 });
 
+describe("foundation date", () => {
+  it("defaults to launch plus 180 days", () => {
+    const result = calculateProperty(example);
+    assert.equal(result.foundationDateEstimated, "2027-04-29");
+    assert.equal(result.foundationDate, "2027-04-29");
+    assert.equal(result.foundationDateOverridden, false);
+    assert.equal(result.stages[0].date, "2027-04-29");
+    assert.equal(result.stages[0].dateOverridden, false);
+    assert.equal(calculateProperty({ ...example, foundationDate: "" }).foundationDate, "2027-04-29");
+    assert.equal(calculateProperty({ ...example, foundationDate: "nope" }).ok, true);
+    assert.equal(calculateProperty({ ...example, foundationDate: "nope" }).foundationDate, "2027-04-29");
+  });
+
+  it("moves stage dates, the first payout and the fund deadlines when overridden", () => {
+    const foundationDate = "2027-06-01";
+    const result = calculateProperty({ ...example, foundationDate });
+    const framework = addMonths(foundationDate, 6);
+    const wall = addMonths(framework, 3);
+    assert.equal(result.foundationDate, foundationDate);
+    assert.equal(result.foundationDateEstimated, "2027-04-29");
+    assert.equal(result.foundationDateOverridden, true);
+    assert.equal(result.stages[0].date, foundationDate);
+    assert.equal(result.stages[0].dateOverridden, true);
+    assert.equal(result.stages[1].date, framework);
+    assert.equal(result.stages[1].dateOverridden, false);
+    assert.equal(result.stages[2].date, wall);
+    assert.equal(result.paymentTimeline.find((step) => step.id === "foundation").date, foundationDate);
+    assert.equal(result.timeline.find((step) => step.id === "foundation").date, foundationDate);
+    assert.equal(result.cashNeeded.repaymentsStart.date, foundationDate);
+    assert.equal(result.repaymentGrowth.paymentsStart.date, foundationDate);
+    assert.equal(result.repaymentGrowth.fullFrom.date, result.stages.at(-1).date);
+    assert.equal(result.fundPlan.estimatedDisbursement, foundationDate);
+    assert.equal(result.fundPlan.disbursement, foundationDate);
+    assert.equal(result.fundPlan.showReadyBy, addDays(foundationDate, -7));
+    assert.equal(result.fundPlan.pledgeUntil, addMonths(foundationDate, 48));
+    assert.equal(result.fundPlan.applicationBy, "2026-11-24");
+    assert.equal(result.totalCashCpf, 509_600);
+    assert.equal(result.estimatedLoan, 1_350_000);
+    assert.equal(Math.round(result.monthlyRepayment), 6_445);
+  });
+
+  it("keeps an edited later stage, and counts the next stage from that date", () => {
+    const result = calculateProperty({
+      ...example,
+      stageDates: { framework: "2028-01-15", wall: "nope" },
+    });
+    assert.equal(result.stages[0].date, "2027-04-29");
+    assert.equal(result.stages[1].date, "2028-01-15");
+    assert.equal(result.stages[1].dateEstimated, "2027-10-29");
+    assert.equal(result.stages[1].dateOverridden, true);
+    assert.equal(result.stages[2].date, addMonths("2028-01-15", 3));
+    assert.equal(result.stages[2].dateOverridden, false);
+  });
+
+  it("still finds the first bank payout after a foundation override when the loan starts later", () => {
+    const foundationDate = "2027-06-01";
+    const result = calculateProperty({ ...example, ltv: 0.55, foundationDate });
+    const ceiling = result.stages.find((stage) => stage.id === "ceiling");
+    assert.equal(result.stages[0].date, foundationDate);
+    assert.equal(result.fundPlan.estimatedDisbursementId, "ceiling");
+    assert.equal(result.fundPlan.disbursement, ceiling.date);
+    assert.equal(result.fundPlan.showReadyBy, addDays(ceiling.date, -7));
+    assert.notEqual(ceiling.date, "2028-04-29");
+  });
+});
+
 describe("Buyer's Stamp Duty tier boundaries", () => {
   const cases = [
     [0, 0],
